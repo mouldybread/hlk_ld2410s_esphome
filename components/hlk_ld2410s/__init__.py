@@ -1,8 +1,5 @@
 """
 HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
-
-Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 12:06:17 UTC
 """
 
 import esphome.codegen as cg
@@ -20,6 +17,7 @@ from esphome.const import (
     CONF_UNIT_OF_MEASUREMENT,
     DEVICE_CLASS_DISTANCE,
     DEVICE_CLASS_MOTION,
+    DEVICE_CLASS_OCCUPANCY,
     ICON_RADIATOR,
     ICON_MOTION_SENSOR,
     ICON_RULER,
@@ -38,15 +36,13 @@ HLKLD2410SComponent = hlk_ld2410s_ns.class_(
 )
 EnableConfigButton = hlk_ld2410s_ns.class_("EnableConfigButton", button.Button)
 DisableConfigButton = hlk_ld2410s_ns.class_("DisableConfigButton", button.Button)
-ResponseSpeedSelect = hlk_ld2410s_ns.class_("ResponseSpeedSelect", select.Select)
-GateThresholdNumber = hlk_ld2410s_ns.class_("GateThresholdNumber", number.Number)
 
 # Custom configuration keys
 CONF_DISTANCE = "distance"
 CONF_PRESENCE = "presence"
 CONF_CONFIG_MODE = "config_mode"
-CONF_ENABLE_CONFIG = "enable_config"
-CONF_DISABLE_CONFIG = "disable_config"
+CONF_ENABLE_CONFIGURATION = "enable_configuration"
+CONF_DISABLE_CONFIGURATION = "disable_configuration"
 CONF_RESPONSE_SPEED = "response_speed"
 CONF_OUTPUT_MODE = "output_mode"
 CONF_GATES = "gates"
@@ -55,13 +51,20 @@ CONF_ENERGY = "energy"
 CONF_UNMANNED_DELAY = "unmanned_delay"
 CONF_STATUS_REPORT_FREQUENCY = "status_report_frequency"
 CONF_DISTANCE_REPORT_FREQUENCY = "distance_report_frequency"
+CONF_FARTHEST_GATE = "farthest_gate"
+CONF_NEAREST_GATE = "nearest_gate"
+CONF_TRIGGER_THRESHOLDS = "trigger_thresholds"
+CONF_HOLD_THRESHOLDS = "hold_thresholds"
+CONF_AUTO_THRESHOLD = "auto_threshold"
+CONF_TRIGGER_FACTOR = "trigger_factor"
+CONF_HOLD_FACTOR = "hold_factor"
+CONF_SCAN_TIME = "scan_time"
 
 # Custom units and constants
 UNIT_CENTIMETER = "cm"
 UNIT_PERCENT = "%"
 UNIT_HERTZ = "Hz"
 
-ICON_ENERGY = "mdi:lightning-bolt"
 ICON_RADAR = "mdi:radar"
 
 GATE_COUNT = 16
@@ -71,14 +74,10 @@ MIN_UNMANNED_DELAY = 0
 MAX_REPORT_FREQ = 8.0
 MIN_REPORT_FREQ = 0.5
 
-# Validation schemas
-GATE_SCHEMA = cv.Schema({
-    cv.Optional(CONF_ENERGY): sensor.sensor_schema(
-        icon=ICON_ENERGY,
-        accuracy_decimals=0,
-        state_class=STATE_CLASS_MEASUREMENT,
-        unit_of_measurement=UNIT_PERCENT,
-    ),
+AUTO_THRESHOLD_SCHEMA = cv.Schema({
+    cv.Required(CONF_TRIGGER_FACTOR): cv.int_range(min=0, max=100),
+    cv.Required(CONF_HOLD_FACTOR): cv.int_range(min=0, max=100),
+    cv.Required(CONF_SCAN_TIME): cv.int_range(min=0, max=120),
 })
 
 CONFIG_SCHEMA = cv.All(
@@ -101,17 +100,17 @@ CONFIG_SCHEMA = cv.All(
             ),
             cv.Optional(CONF_PRESENCE): binary_sensor.binary_sensor_schema(
                 icon=ICON_MOTION_SENSOR,
-                device_class=DEVICE_CLASS_MOTION,
+                device_class=DEVICE_CLASS_OCCUPANCY,
             ),
             cv.Optional(CONF_CONFIG_MODE): binary_sensor.binary_sensor_schema(
                 icon=ICON_RADAR,
             ),
-            cv.Optional(CONF_ENABLE_CONFIG): cv.Schema({
+            cv.Optional(CONF_ENABLE_CONFIGURATION): cv.Schema({
                 cv.GenerateID(): cv.declare_id(EnableConfigButton),
                 cv.Optional(CONF_NAME): cv.string,
                 cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
             }).extend(cv.COMPONENT_SCHEMA),
-            cv.Optional(CONF_DISABLE_CONFIG): cv.Schema({
+            cv.Optional(CONF_DISABLE_CONFIGURATION): cv.Schema({
                 cv.GenerateID(): cv.declare_id(DisableConfigButton),
                 cv.Optional(CONF_NAME): cv.string,
                 cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
@@ -125,9 +124,17 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_DISTANCE_REPORT_FREQUENCY, default=0.5): cv.float_range(
                 min=MIN_REPORT_FREQ, max=MAX_REPORT_FREQ
             ),
-            cv.Optional(CONF_GATES): cv.Schema({
-                cv.Range(min=0, max=GATE_COUNT-1): GATE_SCHEMA,
-            }),
+            cv.Optional(CONF_FARTHEST_GATE, default=12): cv.int_range(min=1, max=16),
+            cv.Optional(CONF_NEAREST_GATE, default=0): cv.int_range(min=0, max=16),
+            cv.Optional(CONF_TRIGGER_THRESHOLDS): cv.All(
+                cv.ensure_list(cv.int_range(min=0, max=100)),
+                cv.Length(max=GATE_COUNT),
+            ),
+            cv.Optional(CONF_HOLD_THRESHOLDS): cv.All(
+                cv.ensure_list(cv.int_range(min=0, max=100)),
+                cv.Length(max=GATE_COUNT),
+            ),
+            cv.Optional(CONF_AUTO_THRESHOLD): AUTO_THRESHOLD_SCHEMA,
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -160,14 +167,14 @@ async def to_code(config):
         sens = await binary_sensor.new_binary_sensor(config[CONF_CONFIG_MODE])
         cg.add(var.set_config_mode_sensor(sens))
 
-    if CONF_ENABLE_CONFIG in config:
-        conf = config[CONF_ENABLE_CONFIG]
+    if CONF_ENABLE_CONFIGURATION in config:
+        conf = config[CONF_ENABLE_CONFIGURATION]
         btn = cg.new_Pvariable(conf[CONF_ID])
         await cg.register_component(btn, conf)
         cg.add(var.set_enable_config_button(btn))
 
-    if CONF_DISABLE_CONFIG in config:
-        conf = config[CONF_DISABLE_CONFIG]
+    if CONF_DISABLE_CONFIGURATION in config:
+        conf = config[CONF_DISABLE_CONFIGURATION]
         btn = cg.new_Pvariable(conf[CONF_ID])
         await cg.register_component(btn, conf)
         cg.add(var.set_disable_config_button(btn))
@@ -181,8 +188,22 @@ async def to_code(config):
     if CONF_DISTANCE_REPORT_FREQUENCY in config:
         cg.add(var.set_distance_report_frequency(config[CONF_DISTANCE_REPORT_FREQUENCY]))
 
-    if CONF_GATES in config:
-        for gate_id, gate_config in config[CONF_GATES].items():
-            if CONF_ENERGY in gate_config:
-                sens = await sensor.new_sensor(gate_config[CONF_ENERGY])
-                cg.add(var.set_gate_energy_sensor(gate_id, sens))
+    if CONF_FARTHEST_GATE in config:
+        cg.add(var.set_farthest_gate(config[CONF_FARTHEST_GATE]))
+
+    if CONF_NEAREST_GATE in config:
+        cg.add(var.set_nearest_gate(config[CONF_NEAREST_GATE]))
+
+    if CONF_TRIGGER_THRESHOLDS in config:
+        cg.add(var.set_trigger_thresholds(config[CONF_TRIGGER_THRESHOLDS]))
+
+    if CONF_HOLD_THRESHOLDS in config:
+        cg.add(var.set_hold_thresholds(config[CONF_HOLD_THRESHOLDS]))
+
+    if CONF_AUTO_THRESHOLD in config:
+        conf = config[CONF_AUTO_THRESHOLD]
+        cg.add(var.set_auto_threshold(
+            conf[CONF_TRIGGER_FACTOR],
+            conf[CONF_HOLD_FACTOR],
+            conf[CONF_SCAN_TIME]
+        ))
