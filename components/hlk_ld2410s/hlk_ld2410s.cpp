@@ -3,7 +3,7 @@
  * 
  * Author: mouldybread
  * Created: 2025-03-27 15:44:50 UTC
- * Updated: 2025-03-27 16:35:07 UTC
+ * Updated: 2025-03-27 16:40:18 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -123,6 +123,7 @@
          buffer.erase(buffer.begin());
      }
  
+     // Debug print buffer contents every second
      if (now - last_debug > 1000) {
          std::string debug_str = "Buffer contents:";
          for (uint8_t byte : buffer) {
@@ -178,35 +179,30 @@
              }
          }
      } else {  // Simple mode
-         if (buffer.size() >= 4) {
-             for (size_t i = 0; i <= buffer.size() - 4; i++) {
-                 if (buffer[i] == 0x6E) {
-                     ESP_LOGD(TAG, "Found simple frame header at position %d", i);
-                     
-                     if (i + 4 <= buffer.size() && buffer[i + 3] == 0x62) {
-                         ESP_LOGD(TAG, "Simple frame bytes: 0x%02X 0x%02X 0x%02X 0x%02X", 
-                                 buffer[i], buffer[i + 1], buffer[i + 2], buffer[i + 3]);
-                         
-                         uint8_t target_state = buffer[i + 1];
-                         uint16_t distance = buffer[i + 2];  // Single byte for distance in simple mode
-                         
-                         ESP_LOGD(TAG, "Simple frame - State: %d, Distance: %d", target_state, distance);
-                         
-                         if (this->distance_sensor_ != nullptr) {
-                             this->distance_sensor_->publish_state(distance / 100.0f);
-                             ESP_LOGD(TAG, "Published distance: %.2f m", distance / 100.0f);
-                         }
-                         if (this->presence_sensor_ != nullptr) {
-                             this->presence_sensor_->publish_state(target_state > 0);
-                             ESP_LOGD(TAG, "Published presence: %s", target_state > 0 ? "true" : "false");
-                         }
- 
-                         buffer.erase(buffer.begin(), buffer.begin() + i + 4);
-                         break;
-                     } else {
-                         ESP_LOGV(TAG, "Incomplete frame or invalid end marker");
-                     }
+         // Look for complete 5-byte frames
+         while (buffer.size() >= 5) {
+             if (buffer[0] == 0x6E && buffer[4] == 0x62) {  // Valid frame markers
+                 uint8_t target_state = buffer[1];
+                 uint8_t distance = buffer[2];  // Single byte distance
+                 
+                 ESP_LOGD(TAG, "Simple frame - State: %d, Distance: %d cm", target_state, distance);
+                 
+                 // Process data
+                 if (this->distance_sensor_ != nullptr) {
+                     this->distance_sensor_->publish_state(distance / 100.0f);
+                     ESP_LOGD(TAG, "Published distance: %.2f m", distance / 100.0f);
                  }
+                 if (this->presence_sensor_ != nullptr) {
+                     bool presence = (target_state == 0x02);  // 0x02 indicates presence
+                     this->presence_sensor_->publish_state(presence);
+                     ESP_LOGD(TAG, "Published presence: %s", presence ? "true" : "false");
+                 }
+ 
+                 // Remove processed frame
+                 buffer.erase(buffer.begin(), buffer.begin() + 5);
+             } else {
+                 // Not a valid frame start, remove first byte
+                 buffer.erase(buffer.begin());
              }
          }
      }
