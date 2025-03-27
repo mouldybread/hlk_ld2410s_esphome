@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 07:36:27 UTC
+ * Creation Date/Time: 2025-03-27 07:21:00 UTC 
  */
 
  #pragma once
@@ -36,11 +36,6 @@
    void set_disable_config_button(button::Button *button) { disable_config_button_ = button; }
    void set_response_speed_select(select::Select *select) { response_speed_select_ = select; }
    void set_response_speed(uint8_t speed);
-   void read_firmware_version();
-   
-   // Add getters for firmware version info
-   std::string get_firmware_version() const { return firmware_version_; }
-   uint8_t get_protocol_version() const { return protocol_version_; }
  
    // Configuration mode methods
    void enable_configuration();
@@ -57,20 +52,14 @@
    uint32_t last_update_{0};  // Last update timestamp
    bool in_config_mode_{false};
  
-   // Firmware version storage
-   std::string firmware_version_;
-   uint8_t protocol_version_{0};
- 
    // Protocol constants
    static const uint16_t CMD_ENABLE_CONFIG = 0x00FF;
    static const uint16_t CMD_DISABLE_CONFIG = 0x00FE;
    static const uint16_t CMD_SET_RESPONSE_SPEED = 0xFF01;
-   static const uint16_t CMD_READ_FIRMWARE_VERSION = 0x00A0;
  
    // Helper methods for sending commands
    bool write_command_(uint16_t command, const uint8_t *data = nullptr, size_t len = 0);
    bool read_ack_(uint16_t expected_command);
-   void parse_firmware_version_(const uint8_t *data, size_t length);
  };
  
  class EnableConfigButton : public button::Button {
@@ -106,18 +95,6 @@
      uint8_t speed = std::stoi(value);
      parent_->set_response_speed(speed);
      this->publish_state(value);
-   }
- 
-   HLKLD2410SComponent *parent_;
- };
- 
- class ReadFirmwareButton : public button::Button {
-  public:
-   explicit ReadFirmwareButton(HLKLD2410SComponent *parent) : parent_(parent) {}
- 
-  protected:
-   void press_action() override {
-     parent_->read_firmware_version();
    }
  
    HLKLD2410SComponent *parent_;
