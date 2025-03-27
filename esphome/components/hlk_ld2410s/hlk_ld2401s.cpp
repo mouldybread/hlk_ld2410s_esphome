@@ -1,5 +1,8 @@
 #include "hlk_ld2410s.h"
 
+namespace esphome {
+namespace hlk_ld2410s {
+
 void HLK_LD2410S::parse_byte(uint8_t byte) {
   static uint8_t buffer[64];
   static uint8_t index = 0;
@@ -48,3 +51,6 @@ void HLK_LD2410S::parse_byte(uint8_t byte) {
 
   index = 0;
 }
+
+}  // namespace hlk_ld2410s
+}  // namespace esphome

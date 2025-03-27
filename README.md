@@ -12,7 +12,7 @@ external_components:
       type: git
       url: https://github.com/mouldybread/hlk_ld2410s_esphome
       ref: main
-  components: [hlk_ld2410s]
+      components: [hlk_ld2410s]
 
 esphome:
   name: hlk_ld2410s
@@ -28,21 +28,14 @@ uart:
   rx_pin: D3
   baud_rate: 115200
 
-sensor:
-  - platform: custom
-    lambda: |-
-      auto hlk_ld2410s = new HLK_LD2410S(id(uart_bus));
-      App.register_component(hlk_ld2410s);
-      return {hlk_ld2410s->distance_sensor, hlk_ld2410s->presence_sensor};
-    sensors:
-      - name: "HLK LD2410S Distance"
-        unit_of_measurement: "cm"
-      - name: "HLK LD2410S Presence"
+hlk_ld2410s:
+  id: my_ld2410s
 
-custom_component:
-  - id: hlk_ld2410s
-    lambda: |-
-      auto hlk_ld2410s = new HLK_LD2410S(id(uart_bus));
-      App.register_component(hlk_ld2410s);
-      return {hlk_ld2410s};
-```
+sensor:
+  - platform: hlk_ld2410s
+    id: my_ld2410s
+    distance:
+      name: "HLK LD2410S Distance"
+      unit_of_measurement: "cm"
+    presence:
+      name: "HLK LD2410S Presence"
