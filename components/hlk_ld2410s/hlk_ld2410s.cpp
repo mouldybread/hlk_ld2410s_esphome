@@ -2,7 +2,7 @@
  * HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
  * 
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 14:29:01 UTC
+ * Creation Date/Time: 2025-03-27 14:35:06 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -201,3 +201,173 @@
      }
      return false;
  }
+ 
+ bool HLKLD2410SComponent::write_command_(CommandWord command, const std::vector<uint8_t> &data) {
+     ESP_LOGD(TAG, "Writing command 0x%04X", static_cast<uint16_t>(command));
+     
+     // Write frame header
+     write_array(CONFIG_FRAME_HEADER, sizeof(CONFIG_FRAME_HEADER));
+     
+     // Write data length (2 bytes, little endian)
+     uint16_t length = data.size() + 2;  // +2 for command word
+     write_byte(length & 0xFF);
+     write_byte(length >> 8);
+     
+     // Write command word (2 bytes, little endian)
+     uint16_t cmd = static_cast<uint16_t>(command);
+     write_byte(cmd & 0xFF);
+     write_byte(cmd >> 8);
+     
+     // Write data if any
+     if (!data.empty()) {
+         write_array(data.data(), data.size());
+     }
+     
+     // Write frame end
+     write_array(CONFIG_FRAME_END, sizeof(CONFIG_FRAME_END));
+     
+     // Wait for ACK
+     return read_ack_(command);
+ }
+ 
+ bool HLKLD2410SComponent::read_ack_(CommandWord expected_cmd) {
+     uint32_t start = millis();
+     std::vector<uint8_t> buffer;
+     buffer.reserve(32);  // Reserve space for the ACK frame
+     
+     ESP_LOGD(TAG, "Waiting for ACK for command 0x%04X", static_cast<uint16_t>(expected_cmd));
+     
+     while (millis() - start < ACK_TIMEOUT_MS) {
+         if (available()) {
+             uint8_t byte;
+             read_byte(&byte);
+             buffer.push_back(byte);
+             dump_data_("ACK buffer", buffer.data(), buffer.size());
+             
+             // Look for frame header in the buffer
+             if (buffer.size() >= 4) {
+                 for (size_t i = 0; i <= buffer.size() - 4; i++) {
+                     if (verify_frame_header_(&buffer[i], 4)) {
+                         // Found header, ensure we have enough data for a complete ACK frame
+                         if (buffer.size() >= i + 8) {  // Header(4) + Length(2) + Command(2)
+                             uint16_t length = buffer[i+4] | (buffer[i+5] << 8);
+                             uint16_t received_cmd = buffer[i+6] | (buffer[i+7] << 8);
+                             
+                             // Make sure we have the complete frame
+                             if (buffer.size() >= i + 8 + length + 4) {  // Add frame end length
+                                 ESP_LOGD(TAG, "Received ACK - CMD: 0x%04X, Length: %u", 
+                                          received_cmd, length);
+                                 
+                                 // Verify frame end
+                                 if (verify_frame_end_(&buffer[i + 8 + length], 4)) {
+                                     // For most commands, status is in the next two bytes
+                                     uint16_t status = 0;
+                                     if (length >= 4) {  // Make sure we have status bytes
+                                         status = buffer[i+8] | (buffer[i+9] << 8);
+                                     }
+                                     
+                                     if (received_cmd == (static_cast<uint16_t>(expected_cmd) | 0x0100)) {
+                                         ESP_LOGI(TAG, "Command 0x%04X acknowledged with status 0x%04X", 
+                                                 static_cast<uint16_t>(expected_cmd), status);
+                                         return (status == 0x0000);
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                 }
+             }
+             
+             // Prevent buffer from growing too large
+             if (buffer.size() > 64) {
+                 buffer.erase(buffer.begin(), buffer.begin() + 32);
+             }
+         }
+         delay(1);
+     }
+     
+     ESP_LOGW(TAG, "Command 0x%04X not acknowledged within timeout", 
+              static_cast<uint16_t>(expected_cmd));
+     return false;
+ }
+ 
+ bool HLKLD2410SComponent::verify_frame_header_(const uint8_t *buf, size_t len) {
+     if (len < sizeof(CONFIG_FRAME_HEADER)) {
+         return false;
+     }
+     return memcmp(buf, CONFIG_FRAME_HEADER, sizeof(CONFIG_FRAME_HEADER)) == 0;
+ }
+ 
+ bool HLKLD2410SComponent::verify_frame_end_(const uint8_t *buf, size_t len) {
+     if (len < sizeof(CONFIG_FRAME_END)) {
+         return false;
+     }
+     return memcmp(buf, CONFIG_FRAME_END, sizeof(CONFIG_FRAME_END)) == 0;
+ }
+ 
+ void HLKLD2410SComponent::process_simple_frame_(uint8_t frame_type, uint16_t data_length, const uint8_t *data) {
+     if (data_length < 2) {
+         ESP_LOGW(TAG, "Simple frame data too short");
+         return;
+     }
+ 
+     uint16_t distance = (data[0] << 8) | data[1];
+     ESP_LOGD(TAG, "Simple frame - distance: %u cm", distance);
+     
+     if (this->distance_sensor_ != nullptr) {
+         this->distance_sensor_->publish_state(distance / 100.0f);  // Convert to meters
+     }
+ 
+     bool presence = (distance > 0);
+     if (this->presence_sensor_ != nullptr) {
+         this->presence_sensor_->publish_state(presence);
+     }
+ 
+     if (presence) {
+         this->last_presence_detected_ = millis();
+         ESP_LOGI(TAG, "Presence detected at distance: %u cm", distance);
+     }
+ }
+ 
+ void HLKLD2410SComponent::process_standard_frame_(uint8_t frame_type, uint16_t data_length, const uint8_t *data) {
+     if (data_length < 4) {
+         ESP_LOGW(TAG, "Standard frame data too short");
+         return;
+     }
+ 
+     uint16_t distance = (data[0] << 8) | data[1];
+     uint8_t motion_energy = data[2];
+     uint8_t static_energy = data[3];
+     
+     ESP_LOGD(TAG, "Standard frame - distance: %u cm, motion: %u, static: %u", 
+              distance, motion_energy, static_energy);
+     
+     // Process energy values for each gate if available
+     if (data_length >= 4 + MAX_GATES) {
+         for (size_t i = 0; i < MAX_GATES; i++) {
+             uint8_t energy = data[4 + i];
+             auto it = this->gate_energy_sensors_.find(i);
+             if (it != this->gate_energy_sensors_.end() && it->second != nullptr) {
+                 it->second->publish_state(energy);
+             }
+         }
+     }
+ 
+     if (this->distance_sensor_ != nullptr) {
+         this->distance_sensor_->publish_state(distance / 100.0f);  // Convert to meters
+     }
+ 
+     bool presence = (distance > 0);
+     if (this->presence_sensor_ != nullptr) {
+         this->presence_sensor_->publish_state(presence);
+     }
+ 
+     if (presence) {
+         this->last_presence_detected_ = millis();
+         ESP_LOGI(TAG, "Presence detected at distance: %u cm with motion energy: %u, static energy: %u", 
+                  distance, motion_energy, static_energy);
+     }
+ }
+ 
+ }  // namespace hlk_ld2410s
+ }  // namespace esphome
