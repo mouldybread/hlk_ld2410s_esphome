@@ -1,5 +1,8 @@
 """
 HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
+
+Created by github.com/mouldybread
+Creation Date/Time: 2025-03-27 12:12:36 UTC
 """
 
 import esphome.codegen as cg
@@ -25,6 +28,7 @@ from esphome.const import (
     STATE_CLASS_MEASUREMENT,
     UNIT_METER,
 )
+from esphome.components.button import ButtonEntity
 
 CODEOWNERS = ["@mouldybread"]
 DEPENDENCIES = ["uart"]
@@ -35,10 +39,10 @@ HLKLD2410SComponent = hlk_ld2410s_ns.class_(
     "HLKLD2410SComponent", cg.Component, uart.UARTDevice
 )
 EnableConfigButton = hlk_ld2410s_ns.class_(
-    "EnableConfigButton", button.Button, cg.Component
+    "EnableConfigButton", ButtonEntity, cg.Component
 )
 DisableConfigButton = hlk_ld2410s_ns.class_(
-    "DisableConfigButton", button.Button, cg.Component
+    "DisableConfigButton", ButtonEntity, cg.Component
 )
 
 # Configuration keys
@@ -84,17 +88,26 @@ AUTO_THRESHOLD_SCHEMA = cv.Schema({
     cv.Required(CONF_SCAN_TIME): cv.int_range(min=0, max=120),
 })
 
-ENABLE_BUTTON_SCHEMA = cv.Schema({
+ENABLE_BUTTON_SCHEMA = button.BUTTON_SCHEMA.extend({
     cv.GenerateID(): cv.declare_id(EnableConfigButton),
     cv.Optional(CONF_NAME): cv.string,
     cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
 }).extend(cv.COMPONENT_SCHEMA)
 
-DISABLE_BUTTON_SCHEMA = cv.Schema({
+DISABLE_BUTTON_SCHEMA = button.BUTTON_SCHEMA.extend({
     cv.GenerateID(): cv.declare_id(DisableConfigButton),
     cv.Optional(CONF_NAME): cv.string,
     cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
 }).extend(cv.COMPONENT_SCHEMA)
+
+GATE_SCHEMA = cv.Schema({
+    cv.Optional(CONF_ENERGY): sensor.sensor_schema(
+        icon=ICON_ENERGY,
+        accuracy_decimals=0,
+        state_class=STATE_CLASS_MEASUREMENT,
+        unit_of_measurement=UNIT_PERCENT,
+    ),
+})
 
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
@@ -143,6 +156,9 @@ CONFIG_SCHEMA = cv.All(
                 cv.Length(max=GATE_COUNT),
             ),
             cv.Optional(CONF_AUTO_THRESHOLD): AUTO_THRESHOLD_SCHEMA,
+            cv.Optional(CONF_GATES): cv.Schema({
+                cv.Range(min=0, max=GATE_COUNT-1): GATE_SCHEMA,
+            }),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -177,16 +193,20 @@ async def to_code(config):
 
     if CONF_ENABLE_CONFIGURATION in config:
         conf = config[CONF_ENABLE_CONFIGURATION]
-        btn = cg.new_Pvariable(conf[CONF_ID], conf.get(CONF_NAME))
+        btn = cg.new_Pvariable(conf[CONF_ID])
         await cg.register_component(btn, conf)
         await button.register_button(btn, conf)
+        if CONF_NAME in conf:
+            cg.add(btn.set_name(conf[CONF_NAME]))
         cg.add(var.set_enable_config_button(btn))
 
     if CONF_DISABLE_CONFIGURATION in config:
         conf = config[CONF_DISABLE_CONFIGURATION]
-        btn = cg.new_Pvariable(conf[CONF_ID], conf.get(CONF_NAME))
+        btn = cg.new_Pvariable(conf[CONF_ID])
         await cg.register_component(btn, conf)
         await button.register_button(btn, conf)
+        if CONF_NAME in conf:
+            cg.add(btn.set_name(conf[CONF_NAME]))
         cg.add(var.set_disable_config_button(btn))
 
     if CONF_UNMANNED_DELAY in config:
@@ -217,3 +237,9 @@ async def to_code(config):
             conf[CONF_HOLD_FACTOR],
             conf[CONF_SCAN_TIME]
         ))
+        
+    if CONF_GATES in config:
+        for gate_id, gate_config in config[CONF_GATES].items():
+            if CONF_ENERGY in gate_config:
+                sens = await sensor.new_sensor(gate_config[CONF_ENERGY])
+                cg.add(var.set_gate_energy_sensor(gate_id, sens))
