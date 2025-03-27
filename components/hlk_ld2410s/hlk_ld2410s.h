@@ -10,7 +10,8 @@ namespace hlk_ld2410s {
 
 class HLKLD2410SComponent : public Component, public uart::UARTDevice {
  public:
-  HLKLD2410SComponent();
+  explicit HLKLD2410SComponent(uart::UARTComponent *parent);
+  
   void setup() override;
   void loop() override;
 

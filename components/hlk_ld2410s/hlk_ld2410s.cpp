@@ -3,18 +3,18 @@
 namespace esphome {
 namespace hlk_ld2410s {
 
-HLKLD2410SComponent::HLKLD2410SComponent() {}
+HLKLD2410SComponent::HLKLD2410SComponent(uart::UARTComponent *parent) : uart::UARTDevice(parent) {}
 
 void HLKLD2410SComponent::setup() {
   // Initialization code
 }
 
 void HLKLD2410SComponent::loop() {
-  static const size_t max_data_length = 64;  // Changed to size_t
+  static const size_t max_data_length = 64;
   uint8_t data[max_data_length];
   size_t length = this->available();
   if (length > 0) {
-    length = this->read_array(data, std::min(length, max_data_length));  // Now both arguments are size_t
+    length = this->read_array(data, std::min(length, max_data_length));
     this->parse_data_(data, length);
   }
 }
