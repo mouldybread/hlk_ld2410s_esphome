@@ -2,7 +2,7 @@
 HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 13:29:57 UTC
+Creation Date/Time: 2025-03-27 13:32:02 UTC
 """
 
 import esphome.codegen as cg
@@ -13,15 +13,19 @@ from esphome.const import (
     CONF_THROTTLE,
     DEVICE_CLASS_DISTANCE,
     DEVICE_CLASS_MOTION,
+    DEVICE_CLASS_ENERGY,
     ICON_MOTION_SENSOR,
     ICON_RULER,
+    ICON_RADIATOR,
     STATE_CLASS_MEASUREMENT,
     UNIT_METER,
+    UNIT_DECIBEL,
 )
 
 DEPENDENCIES = ["uart"]
 AUTO_LOAD = ["sensor", "binary_sensor", "button"]
 
+# Namespaces
 hlk_ld2410s_ns = cg.esphome_ns.namespace("hlk_ld2410s")
 HLKLD2410SComponent = hlk_ld2410s_ns.class_(
     "HLKLD2410SComponent", cg.Component, uart.UARTDevice
@@ -51,47 +55,89 @@ CONF_SCAN_TIME = "scan_time"
 CONF_ENABLE_CONFIG = "enable_config"
 CONF_DISABLE_CONFIG = "disable_config"
 
-# Gate energy sensor schema
-GATE_ENERGY_SCHEMA = sensor.sensor_schema(
-    unit_of_measurement="",
-    icon=ICON_MOTION_SENSOR,
-    accuracy_decimals=0,
+# Constants
+ICON_RADAR = "mdi:radar"
+DEFAULT_THROTTLE_MS = 50
+DEFAULT_RESPONSE_SPEED = 5
+DEFAULT_UNMANNED_DELAY = 0
+DEFAULT_REPORT_FREQ = 0.5
+DEFAULT_FARTHEST_GATE = 12
+DEFAULT_NEAREST_GATE = 0
+MAX_GATES = 16
+
+# Custom validation helpers
+def validate_gate_number(value):
+    """Validate gate number is within acceptable range."""
+    value = cv.positive_int(value)
+    if value >= MAX_GATES:
+        raise cv.Invalid(f"Gate number must be less than {MAX_GATES}")
+    return value
+
+def validate_thresholds(value):
+    """Validate threshold list."""
+    values = cv.ensure_list(value)
+    if len(values) > MAX_GATES:
+        raise cv.Invalid(f"Cannot have more than {MAX_GATES} threshold values")
+    return [cv.uint8_t(x) for x in values]
+
+def validate_gate_order(config):
+    """Validate nearest gate is not greater than farthest gate."""
+    if CONF_NEAREST_GATE in config and CONF_FARTHEST_GATE in config:
+        if config[CONF_NEAREST_GATE] > config[CONF_FARTHEST_GATE]:
+            raise cv.Invalid(
+                f"Nearest gate ({config[CONF_NEAREST_GATE]}) cannot be greater than "
+                f"farthest gate ({config[CONF_FARTHEST_GATE]})"
+            )
+    return config
+
+# Sensor schemas
+DISTANCE_SENSOR_SCHEMA = sensor.sensor_schema(
+    unit_of_measurement=UNIT_METER,
+    icon=ICON_RULER,
+    accuracy_decimals=2,
+    device_class=DEVICE_CLASS_DISTANCE,
     state_class=STATE_CLASS_MEASUREMENT,
 )
 
-# Configuration validation schema
-CONFIG_SCHEMA = (
+GATE_ENERGY_SCHEMA = sensor.sensor_schema(
+    unit_of_measurement=UNIT_DECIBEL,
+    icon=ICON_RADIATOR,
+    accuracy_decimals=0,
+    device_class=DEVICE_CLASS_ENERGY,
+    state_class=STATE_CLASS_MEASUREMENT,
+)
+
+PRESENCE_SENSOR_SCHEMA = binary_sensor.binary_sensor_schema(
+    device_class=DEVICE_CLASS_MOTION,
+    icon=ICON_MOTION_SENSOR,
+)
+
+# Main configuration schema
+CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(HLKLD2410SComponent),
-            cv.Optional(CONF_DISTANCE): sensor.sensor_schema(
-                unit_of_measurement=UNIT_METER,
-                icon=ICON_RULER,
-                accuracy_decimals=2,
-                device_class=DEVICE_CLASS_DISTANCE,
-                state_class=STATE_CLASS_MEASUREMENT,
+            cv.Optional(CONF_DISTANCE): DISTANCE_SENSOR_SCHEMA,
+            cv.Optional(CONF_PRESENCE): PRESENCE_SENSOR_SCHEMA,
+            cv.Optional(CONF_CONFIG_MODE): binary_sensor.binary_sensor_schema(
+                icon=ICON_RADAR,
             ),
-            cv.Optional(CONF_PRESENCE): binary_sensor.binary_sensor_schema(
-                device_class=DEVICE_CLASS_MOTION,
-                icon=ICON_MOTION_SENSOR,
-            ),
-            cv.Optional(CONF_CONFIG_MODE): binary_sensor.binary_sensor_schema(),
             cv.Optional(CONF_GATE_ENERGY): cv.Schema(
                 {
-                    cv.Required(CONF_GATE): cv.int_range(min=0, max=15),
+                    cv.Required(CONF_GATE): validate_gate_number,
                     cv.Required(CONF_ID): cv.declare_id(sensor.Sensor),
                 }
             ),
-            cv.Optional(CONF_THROTTLE, default="50ms"): cv.positive_time_period_milliseconds,
+            cv.Optional(CONF_THROTTLE, default=f"{DEFAULT_THROTTLE_MS}ms"): cv.positive_time_period_milliseconds,
             cv.Optional(CONF_OUTPUT_MODE, default=True): cv.boolean,
-            cv.Optional(CONF_RESPONSE_SPEED, default=5): cv.int_range(min=0, max=9),
-            cv.Optional(CONF_UNMANNED_DELAY, default=0): cv.uint16_t,
-            cv.Optional(CONF_STATUS_REPORT_FREQ, default=0.5): cv.float_range(min=0.1, max=10.0),
-            cv.Optional(CONF_DISTANCE_REPORT_FREQ, default=0.5): cv.float_range(min=0.1, max=10.0),
-            cv.Optional(CONF_FARTHEST_GATE, default=12): cv.int_range(min=0, max=15),
-            cv.Optional(CONF_NEAREST_GATE, default=0): cv.int_range(min=0, max=15),
-            cv.Optional(CONF_TRIGGER_THRESHOLDS): cv.ensure_list(cv.uint8_t),
-            cv.Optional(CONF_HOLD_THRESHOLDS): cv.ensure_list(cv.uint8_t),
+            cv.Optional(CONF_RESPONSE_SPEED, default=DEFAULT_RESPONSE_SPEED): cv.int_range(min=0, max=9),
+            cv.Optional(CONF_UNMANNED_DELAY, default=DEFAULT_UNMANNED_DELAY): cv.uint16_t,
+            cv.Optional(CONF_STATUS_REPORT_FREQ, default=DEFAULT_REPORT_FREQ): cv.float_range(min=0.1, max=10.0),
+            cv.Optional(CONF_DISTANCE_REPORT_FREQ, default=DEFAULT_REPORT_FREQ): cv.float_range(min=0.1, max=10.0),
+            cv.Optional(CONF_FARTHEST_GATE, default=DEFAULT_FARTHEST_GATE): validate_gate_number,
+            cv.Optional(CONF_NEAREST_GATE, default=DEFAULT_NEAREST_GATE): validate_gate_number,
+            cv.Optional(CONF_TRIGGER_THRESHOLDS): validate_thresholds,
+            cv.Optional(CONF_HOLD_THRESHOLDS): validate_thresholds,
             cv.Optional(CONF_AUTO_THRESHOLD): cv.Schema(
                 {
                     cv.Required(CONF_TRIGGER_FACTOR): cv.uint8_t,
@@ -99,15 +145,17 @@ CONFIG_SCHEMA = (
                     cv.Required(CONF_SCAN_TIME): cv.uint8_t,
                 }
             ),
-            cv.Optional(CONF_ENABLE_CONFIG): button.button_schema(),
-            cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(),
+            cv.Optional(CONF_ENABLE_CONFIG): button.button_schema(icon=ICON_RADAR),
+            cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(icon=ICON_RADAR),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
-    .extend(uart.UART_DEVICE_SCHEMA)
+    .extend(uart.UART_DEVICE_SCHEMA),
+    validate_gate_order,
 )
 
 async def to_code(config):
+    """Generate code for HLK-LD2410S component."""
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await uart.register_uart_device(var, config)
