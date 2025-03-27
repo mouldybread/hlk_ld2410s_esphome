@@ -2,7 +2,7 @@
  * HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
  * 
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 13:18:56 UTC
+ * Creation Date/Time: 2025-03-27 13:23:47 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -29,6 +29,20 @@
      }
  }
  
+ void HLKLD2410SComponent::dump_data_(const char* prefix, const uint8_t* data, size_t len) {
+     if (len == 0) return;
+     
+     char hex[128];
+     char* ptr = hex;
+     for (size_t i = 0; i < len && i < 16; i++) {  // Limit to 16 bytes to avoid buffer overflow
+         ptr += sprintf(ptr, "%02X ", data[i]);
+     }
+     if (len > 16) {
+         strcat(ptr, "...");
+     }
+     ESP_LOGV(TAG, "%s: %s", prefix, hex);
+ }
+ 
  void HLKLD2410SComponent::loop() {
      uint32_t now = millis();
      
@@ -38,58 +52,77 @@
      }
      this->last_update_ = now;
  
-     uint8_t header[4];
-     if (available() >= sizeof(header)) {
-         size_t read_size = read_array(header, sizeof(header));
-         if (read_size < sizeof(header)) {
-             ESP_LOGW(TAG, "Failed to read frame header");
-             return;
-         }
- 
-         if (!verify_frame_header_(header, sizeof(header))) {
-             // Clear buffer and return if header is invalid
-             flush();
-             return;
-         }
- 
-         // Read frame type and data length
-         uint8_t frame_type;
-         uint8_t length_bytes[2];
+     // Look for frame header
+     while (available() >= 4) {  // We need at least 4 bytes for the header
+         uint8_t peek_byte = peek();  // Look at next byte without removing it
          
-         if (!read_byte(&frame_type)) {
-             ESP_LOGW(TAG, "Failed to read frame type");
-             return;
-         }
-         
-         size_t bytes_read = read_array(length_bytes, 2);
-         if (bytes_read < 2) {
-             ESP_LOGW(TAG, "Failed to read data length");
-             return;
-         }
-         
-         uint16_t data_length = (length_bytes[0] << 8) | length_bytes[1];
+         if (peek_byte == 0xFD) {  // Potential start of header
+             uint8_t header[4];
+             size_t header_read = read_array(header, sizeof(header));
+             
+             if (header_read == sizeof(header) && verify_frame_header_(header, sizeof(header))) {
+                 // Valid header found, now read rest of frame
+                 uint8_t frame_type;
+                 uint8_t length_bytes[2];
+                 
+                 if (!read_byte(&frame_type)) {
+                     ESP_LOGV(TAG, "Failed to read frame type");
+                     continue;
+                 }
+                 
+                 size_t bytes_read = read_array(length_bytes, 2);
+                 if (bytes_read < 2) {
+                     ESP_LOGV(TAG, "Failed to read data length");
+                     continue;
+                 }
+                 
+                 uint16_t data_length = (length_bytes[0] << 8) | length_bytes[1];
+                 
+                 // Sanity check the data length
+                 if (data_length > 256) {  // Arbitrary reasonable maximum
+                     ESP_LOGW(TAG, "Invalid data length: %u", data_length);
+                     continue;
+                 }
+                 
+                 // Wait until we have all the data
+                 if (available() < data_length + 4) {  // data + end frame
+                     ESP_LOGV(TAG, "Waiting for more data");
+                     return;  // Come back when we have more data
+                 }
  
-         // Read frame data
-         std::vector<uint8_t> data(data_length);
-         size_t data_read = read_array(data.data(), data_length);
-         if (data_read < data_length) {
-             ESP_LOGW(TAG, "Failed to read frame data, expected %u bytes, got %u", data_length, data_read);
-             return;
-         }
+                 // Read frame data
+                 std::vector<uint8_t> data(data_length);
+                 size_t data_read = read_array(data.data(), data_length);
+                 if (data_read < data_length) {
+                     ESP_LOGV(TAG, "Short read on frame data: expected %u, got %u", data_length, data_read);
+                     continue;
+                 }
  
-         // Read and verify frame end
-         uint8_t end[4];
-         size_t end_size = read_array(end, sizeof(end));
-         if (end_size < sizeof(end) || !verify_frame_end_(end, sizeof(end))) {
-             ESP_LOGW(TAG, "Invalid frame end");
-             return;
-         }
+                 // Read and verify frame end
+                 uint8_t end[4];
+                 size_t end_size = read_array(end, sizeof(end));
+                 if (end_size < sizeof(end) || !verify_frame_end_(end, sizeof(end))) {
+                     ESP_LOGV(TAG, "Invalid frame end");
+                     continue;
+                 }
  
-         // Process frame based on output mode
-         if (this->output_mode_standard_) {
-             process_standard_frame_(frame_type, data_length, data.data());
+                 // We have a complete valid frame, process it
+                 if (this->output_mode_standard_) {
+                     process_standard_frame_(frame_type, data_length, data.data());
+                 } else {
+                     process_simple_frame_(frame_type, data_length, data.data());
+                 }
+                 
+                 return;  // Successfully processed a frame
+             } else {
+                 // Invalid header, skip one byte and continue looking
+                 read();  // Remove the byte we peeked at
+                 ESP_LOGV(TAG, "Skipping invalid header byte: 0x%02X", peek_byte);
+             }
          } else {
-             process_simple_frame_(frame_type, data_length, data.data());
+             // Not a header byte, skip it
+             read();  // Remove the byte we peeked at
+             ESP_LOGV(TAG, "Skipping non-header byte: 0x%02X", peek_byte);
          }
      }
  }
@@ -247,6 +280,7 @@
          if (available()) {
              if (pos >= sizeof(buffer)) {
                  ESP_LOGW(TAG, "Buffer overflow while reading ACK");
+                 dump_data_("Buffer overflow", buffer, pos);
                  flush();
                  return false;
              }
@@ -269,6 +303,7 @@
                                  if (received_cmd != static_cast<uint16_t>(expected_cmd)) {
                                      ESP_LOGW(TAG, "Unexpected ACK command: 0x%04X, expected: 0x%04X", 
                                               received_cmd, static_cast<uint16_t>(expected_cmd));
+                                     dump_data_("Received ACK", &buffer[i], 8);
                                      return false;
                                  }
                                  return true;
@@ -282,6 +317,9 @@
      }
      
      ESP_LOGW(TAG, "ACK timeout after %u ms", UART_READ_TIMEOUT_MS);
+     if (pos > 0) {
+         dump_data_("Timeout buffer", buffer, pos);
+     }
      return false;
  }
  
@@ -290,6 +328,7 @@
      
      if (len != sizeof(EXPECTED_HEADER)) {
          ESP_LOGV(TAG, "Invalid header length: %d", len);
+         dump_data_("Received header", buf, len);
          return false;
      }
  
@@ -297,6 +336,7 @@
          if (buf[i] != EXPECTED_HEADER[i]) {
              ESP_LOGV(TAG, "Invalid header byte at pos %d: 0x%02X (expected: 0x%02X)", 
                       i, buf[i], EXPECTED_HEADER[i]);
+             dump_data_("Received header", buf, len);
              return false;
          }
      }
@@ -309,6 +349,7 @@
      
      if (len != sizeof(EXPECTED_END)) {
          ESP_LOGV(TAG, "Invalid end frame length: %d", len);
+         dump_data_("Received end", buf, len);
          return false;
      }
  
@@ -316,6 +357,7 @@
          if (buf[i] != EXPECTED_END[i]) {
              ESP_LOGV(TAG, "Invalid end byte at pos %d: 0x%02X (expected: 0x%02X)", 
                       i, buf[i], EXPECTED_END[i]);
+             dump_data_("Received end", buf, len);
              return false;
          }
      }
