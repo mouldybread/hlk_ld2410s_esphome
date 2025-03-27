@@ -4,7 +4,7 @@ HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 SPDX-License-Identifier: GPL-3.0-only
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 06:55:59 UTC
+Creation Date/Time: 2025-03-27 07:06:18 UTC
 """
 
 import esphome.config_validation as cv
@@ -32,6 +32,8 @@ CONF_DISABLE_CONFIG = "disable_configuration"
 CONF_CONFIG_MODE = "config_mode"
 CONF_RESPONSE_SPEED = "response_speed"
 CONF_RESPONSE_SPEED_SELECT = "response_speed_select"
+
+RESPONSE_SPEED_OPTIONS = [str(x) for x in range(10)]  # 0-9
 
 # Generate namespaces
 hlk_ld2410s_ns = cg.esphome_ns.namespace('hlk_ld2410s')
@@ -62,10 +64,13 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(DisableConfigButton),
     cv.Optional(CONF_THROTTLE): cv.positive_time_period_milliseconds,
     cv.Optional(CONF_RESPONSE_SPEED): cv.int_range(min=0, max=9),
-    cv.Optional(CONF_RESPONSE_SPEED_SELECT): select.select_schema(
-        options=[str(x) for x in range(10)],  # 0-9
-        icon="mdi:speedometer",
-    ),
+    cv.Optional(CONF_RESPONSE_SPEED_SELECT): select.SELECT_SCHEMA.extend({
+        cv.GenerateID(): cv.declare_id(ResponseSpeedSelect),
+        cv.Required(select.CONF_OPTIONS): cv.All(
+            cv.ensure_list(cv.string_strict), 
+            cv.Length(min=1),
+        ),
+    }).extend(cv.COMPONENT_SCHEMA),
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
@@ -99,5 +104,6 @@ async def to_code(config):
         cg.add(var.set_throttle(config[CONF_THROTTLE]))
 
     if CONF_RESPONSE_SPEED_SELECT in config:
-        sel = await select.new_select(config[CONF_RESPONSE_SPEED_SELECT], options=[str(x) for x in range(10)])
+        conf = config[CONF_RESPONSE_SPEED_SELECT]
+        sel = await select.new_select(conf, options=RESPONSE_SPEED_OPTIONS)
         cg.add(var.set_response_speed_select(sel))
