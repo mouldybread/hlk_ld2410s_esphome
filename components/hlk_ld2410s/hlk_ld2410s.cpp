@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 06:38:13 UTC
+ * Creation Date/Time: 2025-03-27 06:45:19 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -25,6 +25,7 @@
  void HLKLD2410SComponent::setup() {
    ESP_LOGCONFIG(TAG, "Setting up HLK-LD2410S");
    last_update_ = millis();
+   in_config_mode_ = false;
    
    // Initialize config mode sensor to known state
    if (config_mode_sensor_ != nullptr) {
@@ -96,6 +97,11 @@
  }
  
  bool HLKLD2410SComponent::write_command_(uint16_t command, const uint8_t *data, size_t len) {
+   // Clear any pending data in the buffer
+   while (available()) {
+     read();
+   }
+ 
    // Write frame header
    this->write_array(CONFIG_FRAME_HEADER, sizeof(CONFIG_FRAME_HEADER));
    
@@ -123,44 +129,46 @@
    uint32_t start_time = millis();
    
    while ((millis() - start_time) < 1000) {  // 1 second timeout
-     if (available() >= 8) {  // Minimum ACK size
-       uint8_t header[4];
+     if (available() >= 12) {  // Minimum ACK size = header(4) + len(2) + cmd(2) + end(4)
+       // Read and verify header
        for (int i = 0; i < 4; i++) {
-         header[i] = read();
-         if (header[i] != CONFIG_FRAME_HEADER[i]) {
-           ESP_LOGW(TAG, "Invalid ACK header");
+         if (read() != CONFIG_FRAME_HEADER[i]) {
+           ESP_LOGW(TAG, "Invalid ACK header at position %d", i);
            return false;
          }
        }
        
+       // Read length and command
        uint16_t len = read() | (read() << 8);
        uint16_t cmd = read() | (read() << 8);
        
-       if (cmd != (expected_command | 0x0100)) {  // ACK commands are original + 0x0100
-         ESP_LOGW(TAG, "Unexpected ACK command: 0x%04X", cmd);
+       // Expected ACK command is original command | 0x0100
+       if (cmd != (expected_command | 0x0100)) {
+         ESP_LOGW(TAG, "Unexpected ACK command: 0x%04X, expected: 0x%04X", 
+                  cmd, expected_command | 0x0100);
          return false;
        }
        
-       // Read rest of data and verify frame end
+       // Skip any additional data
        for (uint16_t i = 0; i < len - 2; i++) {
          read();
        }
        
-       uint8_t end[4];
+       // Read and verify end sequence
        for (int i = 0; i < 4; i++) {
-         end[i] = read();
-         if (end[i] != CONFIG_FRAME_END[i]) {
-           ESP_LOGW(TAG, "Invalid ACK end");
+         if (read() != CONFIG_FRAME_END[i]) {
+           ESP_LOGW(TAG, "Invalid ACK end at position %d", i);
            return false;
          }
        }
        
+       ESP_LOGD(TAG, "Valid ACK received for command 0x%04X", expected_command);
        return true;
      }
      delay(1);
    }
    
-   ESP_LOGW(TAG, "ACK timeout");
+   ESP_LOGW(TAG, "ACK timeout waiting for command 0x%04X", expected_command);
    return false;
  }
  
@@ -169,9 +177,9 @@
    
    uint8_t data[] = {0x01, 0x00};  // Enable configuration command value
    
-   // Update sensor state before attempting command
-   if (config_mode_sensor_ != nullptr) {
-     config_mode_sensor_->publish_state(false);  // Reset to known state
+   // Clear any pending data first
+   while (available()) {
+     read();
    }
    
    if (write_command_(CMD_ENABLE_CONFIG, data, sizeof(data))) {
@@ -180,12 +188,14 @@
        in_config_mode_ = true;
        if (config_mode_sensor_ != nullptr) {
          config_mode_sensor_->publish_state(true);
+         ESP_LOGD(TAG, "Configuration mode sensor updated to ON");
        }
      } else {
-       ESP_LOGW(TAG, "Failed to enable configuration mode");
+       ESP_LOGW(TAG, "Failed to enable configuration mode - no valid ACK");
        in_config_mode_ = false;
        if (config_mode_sensor_ != nullptr) {
          config_mode_sensor_->publish_state(false);
+         ESP_LOGD(TAG, "Configuration mode sensor updated to OFF (ACK failure)");
        }
      }
    } else {
@@ -193,6 +203,7 @@
      in_config_mode_ = false;
      if (config_mode_sensor_ != nullptr) {
        config_mode_sensor_->publish_state(false);
+       ESP_LOGD(TAG, "Configuration mode sensor updated to OFF (send failure)");
      }
    }
  }
@@ -200,18 +211,26 @@
  void HLKLD2410SComponent::disable_configuration() {
    ESP_LOGD(TAG, "Disabling configuration mode");
    
+   // Clear any pending data first
+   while (available()) {
+     read();
+   }
+   
    if (write_command_(CMD_DISABLE_CONFIG)) {
      if (read_ack_(CMD_DISABLE_CONFIG)) {
        ESP_LOGI(TAG, "Configuration mode disabled");
        in_config_mode_ = false;
        if (config_mode_sensor_ != nullptr) {
          config_mode_sensor_->publish_state(false);
+         ESP_LOGD(TAG, "Configuration mode sensor updated to OFF");
        }
      } else {
-       ESP_LOGW(TAG, "Failed to disable configuration mode");
+       ESP_LOGW(TAG, "Failed to disable configuration mode - no valid ACK");
        // Keep previous state if disable fails
        if (config_mode_sensor_ != nullptr) {
          config_mode_sensor_->publish_state(in_config_mode_);
+         ESP_LOGD(TAG, "Configuration mode sensor kept at %s (ACK failure)", 
+                  in_config_mode_ ? "ON" : "OFF");
        }
      }
    } else {
@@ -219,6 +238,8 @@
      // Keep previous state if command fails
      if (config_mode_sensor_ != nullptr) {
        config_mode_sensor_->publish_state(in_config_mode_);
+       ESP_LOGD(TAG, "Configuration mode sensor kept at %s (send failure)", 
+                in_config_mode_ ? "ON" : "OFF");
      }
    }
  }
