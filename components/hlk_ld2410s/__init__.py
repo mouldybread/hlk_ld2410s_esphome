@@ -9,10 +9,11 @@ from esphome.const import (
     ICON_RULER,
     ICON_MOTION_SENSOR,
 )
-from esphome.components import sensor, uart
+from esphome.components import sensor, uart, binary_sensor
+from esphome.components.binary_sensor import BinarySensor
 
 DEPENDENCIES = ['uart']
-AUTO_LOAD = ['sensor']
+AUTO_LOAD = ['sensor', 'binary_sensor']
 
 # Define our own constants
 CONF_PRESENCE = "presence"
@@ -33,9 +34,8 @@ CONFIG_SCHEMA = cv.Schema({
         state_class=STATE_CLASS_MEASUREMENT,
         icon=ICON_RULER,
     ),
-    cv.Optional(CONF_PRESENCE): sensor.sensor_schema(
-        accuracy_decimals=0,
-        state_class=STATE_CLASS_MEASUREMENT,
+    cv.Optional(CONF_PRESENCE): binary_sensor.binary_sensor_schema(
+        device_class="occupancy",
         icon=ICON_MOTION_SENSOR,
     ),
     cv.Optional(CONF_THROTTLE): cv.positive_time_period_milliseconds,
@@ -51,7 +51,7 @@ async def to_code(config):
         cg.add(var.set_distance_sensor(sens))
     
     if CONF_PRESENCE in config:
-        sens = await sensor.new_sensor(config[CONF_PRESENCE])
+        sens = await binary_sensor.new_binary_sensor(config[CONF_PRESENCE])
         cg.add(var.set_presence_sensor(sens))
 
     if CONF_THROTTLE in config:

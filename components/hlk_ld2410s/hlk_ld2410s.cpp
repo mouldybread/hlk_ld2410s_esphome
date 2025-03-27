@@ -50,17 +50,17 @@ void HLKLD2410SComponent::loop() {
     bool presence = (state >= 2);
     
     // Parse distance (little endian format)
-    uint16_t distance = (distance_low) | (distance_high << 8);  // Swapped order for little-endian
+    uint16_t distance = (distance_low) | (distance_high << 8);
 
     ESP_LOGD(TAG, "Frame received - State: %u, Distance: %u cm, Presence: %s", 
              state, distance, presence ? "true" : "false");
 
-    // Update sensors with has_state flag
+    // Update sensors
     if (this->presence_sensor_ != nullptr) {
-      this->presence_sensor_->publish_state(presence ? 1 : 0);
-      ESP_LOGV(TAG, "Published presence: %d", presence ? 1 : 0);
+      this->presence_sensor_->publish_state(presence);
+      ESP_LOGV(TAG, "Published presence: %s", presence ? "ON" : "OFF");
     }
-    if (this->distance_sensor_ != nullptr && distance > 0) {  // Only publish non-zero distances
+    if (this->distance_sensor_ != nullptr && distance > 0) {
       this->distance_sensor_->publish_state(distance);
       ESP_LOGV(TAG, "Published distance: %u cm", distance);
     }
@@ -73,7 +73,7 @@ void HLKLD2410SComponent::loop() {
 void HLKLD2410SComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "HLK-LD2410S:");
   LOG_SENSOR("  ", "Distance", this->distance_sensor_);
-  LOG_SENSOR("  ", "Presence", this->presence_sensor_);
+  LOG_BINARY_SENSOR("  ", "Presence", this->presence_sensor_);
   ESP_LOGCONFIG(TAG, "  Throttle: %ums", this->throttle_ms_);
 }
 
