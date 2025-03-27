@@ -1,4 +1,8 @@
-"""HLK-LD2410S mmWave Radar Sensor integration for ESPHome."""
+"""HLK-LD2410S mmWave Radar Sensor integration for ESPHome.
+
+Created by github.com/mouldybread
+Creation Date/Time: 2025-03-27 14:58:36 UTC
+"""
 
 import esphome.codegen as cg
 import esphome.config_validation as cv
@@ -172,3 +176,5 @@ async def to_code(config):
         if gate_conf := config.get(CONF_GATE_ENERGY.format(i)):
             sens = await sensor.new_sensor(gate_conf)
             cg.add(var.set_gate_energy_sensor(i, sens))
+
+hlk_ld2410s_ns.end_namespace()  # Add namespace closure
