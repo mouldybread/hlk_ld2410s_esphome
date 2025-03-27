@@ -1,8 +1,8 @@
 /**
  * Implementation of HLK-LD2410S mmWave Radar Sensor component for ESPHome.
  * 
- * Author: mouldybread
- * Created: 2025-03-27 15:26:33 UTC
+ * Author: github.com/mouldybread
+ * Created: 2025-03-27 15:32:08 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -11,13 +11,14 @@
  namespace esphome {
  namespace hlk_ld2410s {
  
- void EnableConfigButton::press() {
+ void EnableConfigButton::press_action() {
      this->parent_->enable_configuration_();
  }
  
- void DisableConfigButton::press() {
+ void DisableConfigButton::press_action() {
      this->parent_->disable_configuration_();
  }
+ 
  
  void HLKLD2410SComponent::setup() {
      ESP_LOGCONFIG(TAG, "Setting up HLK-LD2410S...");
@@ -482,5 +483,6 @@
      return this->send_command_(CommandWord::WRITE_HOLD_THRESHOLD, this->hold_thresholds_);
  }
  
- }  // namespace hlk_ld2410s
- }  // namespace esphome
+
+}  // namespace hlk_ld2410s
+}  // namespace esphome

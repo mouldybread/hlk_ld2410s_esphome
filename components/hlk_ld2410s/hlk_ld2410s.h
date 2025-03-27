@@ -2,7 +2,7 @@
  * HLK-LD2410S mmWave Radar Sensor component for ESPHome.
  * 
  * Author: github.com/mouldybread
- * Created: 2025-03-27 15:25:00 UTC
+ * Created: 2025-03-27 15:32:08 UTC
  */
 
  #pragma once
@@ -96,7 +96,7 @@
  class EnableConfigButton : public button::Button {
   public:
      explicit EnableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
-     void press() override;
+     void press_action() override;
   protected:
      HLKLD2410SComponent *parent_;
  };
@@ -104,7 +104,7 @@
  class DisableConfigButton : public button::Button {
   public:
      explicit DisableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
-     void press() override;
+     void press_action() override;
   protected:
      HLKLD2410SComponent *parent_;
  };
@@ -117,7 +117,6 @@
      void loop() override;
      void dump_config() override;
      float get_setup_priority() const override { return setup_priority::LATE; }
-     const char *get_component_type() const override { return CONF_CATEGORY; }
  
      void set_throttle(uint32_t throttle) { this->throttle_ = throttle; }
      void set_distance_sensor(sensor::Sensor *distance_sensor) { this->distance_sensor_ = distance_sensor; }
