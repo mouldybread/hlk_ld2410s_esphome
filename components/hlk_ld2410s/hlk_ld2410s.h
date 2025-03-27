@@ -14,15 +14,17 @@ class HLKLD2410SComponent : public Component, public uart::UARTDevice {
   
   void setup() override;
   void loop() override;
+  void dump_config() override;
 
   void set_distance_sensor(sensor::Sensor *sensor) { distance_sensor_ = sensor; }
   void set_presence_sensor(sensor::Sensor *sensor) { presence_sensor_ = sensor; }
+  void set_throttle(uint32_t throttle_ms) { throttle_ms_ = throttle_ms; }
 
  protected:
   sensor::Sensor *distance_sensor_{nullptr};
   sensor::Sensor *presence_sensor_{nullptr};
-
-  void parse_data_(const uint8_t *data, size_t length);
+  uint32_t throttle_ms_{0};  // Throttle in milliseconds
+  uint32_t last_update_{0};  // Last update timestamp
 };
 
 }  // namespace hlk_ld2410s
