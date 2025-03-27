@@ -2,7 +2,7 @@
 HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 13:38:38 UTC
+Creation Date/Time: 2025-03-27 13:44:26 UTC
 """
 
 import esphome.codegen as cg
@@ -135,6 +135,7 @@ CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(HLKLD2410SComponent),
+            cv.GenerateID(uart.CONF_UART_ID): cv.use_id(uart.UARTComponent),
             cv.Optional(CONF_DISTANCE): sensor.sensor_schema(
                 unit_of_measurement=UNIT_METER,
                 icon=ICON_RULER,
@@ -184,16 +185,15 @@ CONFIG_SCHEMA = cv.All(
             }).extend(cv.COMPONENT_SCHEMA),
         }
     )
-    .extend(cv.COMPONENT_SCHEMA)
-    .extend(uart.UART_DEVICE_SCHEMA),
+    .extend(cv.COMPONENT_SCHEMA),
     validate_gate_order,
 )
 
 async def to_code(config):
     """Generate code for HLK-LD2410S component."""
-    var = cg.new_Pvariable(config[CONF_ID])
+    uart_component = await cg.get_variable(config[uart.CONF_UART_ID])
+    var = cg.new_Pvariable(config[CONF_ID], uart_component)
     await cg.register_component(var, config)
-    await uart.register_uart_device(var, config)
 
     if CONF_DISTANCE in config:
         sens = await sensor.new_sensor(config[CONF_DISTANCE])
