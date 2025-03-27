@@ -1,6 +1,7 @@
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
-from esphome import cg, automation
+from esphome import core as cg
+from esphome import automation
 
 HLK_LD2410SComponent = cg.global_ns.class_("HLK_LD2410S", cg.Component, cg.UARTDevice)
 
