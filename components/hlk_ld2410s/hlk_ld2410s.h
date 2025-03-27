@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 11:29:06 UTC
+ * Creation Date/Time: 2025-03-27 11:32:15 UTC
  */
 
  #pragma once
@@ -29,7 +29,7 @@
    explicit EnableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
    
   protected:
-   void press() override;
+   void press_action() override;
    HLKLD2410SComponent *parent_;
  };
  
@@ -38,7 +38,7 @@
    explicit DisableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
    
   protected:
-   void press() override;
+   void press_action() override;
    HLKLD2410SComponent *parent_;
  };
  
@@ -77,6 +77,11 @@
    RESPONSE_SPEED = 0x000B
  };
  
+ // Frame sizes
+ static const size_t MINIMAL_FRAME_LENGTH = 5;  // header(1) + state(1) + distance(2) + end(1)
+ static const size_t STANDARD_FRAME_MIN_LENGTH = 72;  // header(4) + len(2) + type(1) + state(1) + distance(2) + reserved(2) + energy(64) + end(4)
+ static const size_t CONFIG_FRAME_MIN_LENGTH = 10;  // header(4) + len(2) + cmd(2) + end(4)
+ 
  class HLKLD2410SComponent : public Component, public uart::UARTDevice {
   public:
    explicit HLKLD2410SComponent(uart::UARTComponent *parent) : UARTDevice(parent) {}
@@ -85,6 +90,7 @@
    void loop() override;
    void dump_config() override;
  
+   // Sensor configuration methods
    void set_distance_sensor(sensor::Sensor *sensor) { distance_sensor_ = sensor; }
    void set_presence_sensor(binary_sensor::BinarySensor *sensor) { presence_sensor_ = sensor; }
    void set_config_mode_sensor(binary_sensor::BinarySensor *sensor) { config_mode_sensor_ = sensor; }
@@ -110,7 +116,7 @@
    bool read_serial_number(std::string &serial);
  
   protected:
-   // Sensors
+   // Sensors and controls
    sensor::Sensor *distance_sensor_{nullptr};
    binary_sensor::BinarySensor *presence_sensor_{nullptr};
    binary_sensor::BinarySensor *config_mode_sensor_{nullptr};
@@ -126,20 +132,22 @@
  
    // Device information
    struct Version {
-     uint16_t major;
-     uint16_t minor;
-     uint16_t patch;
+     uint16_t major{0};
+     uint16_t minor{0};
+     uint16_t patch{0};
    } firmware_version_;
  
    // Threshold storage
    std::vector<uint32_t> trigger_thresholds_;
    std::vector<uint32_t> hold_thresholds_;
    
-   // Helper methods for protocol handling
+   // Protocol handling methods
    bool write_command_(CommandWord cmd, const uint8_t *data = nullptr, size_t len = 0);
    bool read_ack_(CommandWord expected_cmd);
    bool verify_frame_header_(const uint8_t *header, size_t len);
    bool verify_frame_end_(const uint8_t *end, size_t len);
+   
+   // Data processing methods
    void process_minimal_frame_(uint8_t state, uint16_t distance);
    void process_standard_frame_(uint8_t state, uint16_t distance, const uint8_t *energy_values);
    void process_threshold_progress_(uint16_t progress);
