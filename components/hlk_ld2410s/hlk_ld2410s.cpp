@@ -11,14 +11,6 @@
  namespace esphome {
  namespace hlk_ld2410s {
  
- void EnableConfigButton::press_action() {
-     this->parent_->enable_configuration_();
- }
- 
- void DisableConfigButton::press_action() {
-     this->parent_->disable_configuration_();
- }
- 
  void HLKLD2410SComponent::setup() {
      ESP_LOGCONFIG(TAG, "Setting up HLK-LD2410S...");
      this->reset_input_buffer_();
@@ -170,10 +162,10 @@
  
      // Process command
      switch (command) {
-         case CMD_ENGINEERING_DATA:
+         case static_cast<uint8_t>(CommandType::CMD_ENGINEERING_DATA):
              this->handle_engineering_data_(payload);
              break;
-         case CMD_SIMPLE_DATA:
+         case static_cast<uint8_t>(CommandType::CMD_SIMPLE_DATA):
              this->handle_simple_data_(payload);
              break;
          default:
