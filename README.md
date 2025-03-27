@@ -1,4 +1,10 @@
-# hlk_ld2410s_esphome
+# HLK LD2410S ESPHome Component
+## TESTING/EXPERIMENTAL - MAY BE BROKEN
+This repository contains the ESPHome component for the HLK LD2410S module.
+
+## Usage
+
+To use this component in your ESPHome configuration, add the following to your `.yaml` file:
 
 ```
 external_components:
