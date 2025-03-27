@@ -8,6 +8,8 @@
 namespace esphome {
 namespace hlk_ld2410s {
 
+static const char *const TAG = "hlk_ld2410s";  // Add TAG definition
+
 class HLKLD2410SComponent : public Component, public uart::UARTDevice {
  public:
   explicit HLKLD2410SComponent(uart::UARTComponent *parent);

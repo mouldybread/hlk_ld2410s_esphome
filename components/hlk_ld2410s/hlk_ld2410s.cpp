@@ -62,10 +62,10 @@ void HLKLD2410SComponent::loop() {
 }
 
 void HLKLD2410SComponent::dump_config() {
-  ESP_LOGCONFIG("", "HLK-LD2410S:");
+  ESP_LOGCONFIG(TAG, "HLK-LD2410S:");
   LOG_SENSOR("  ", "Distance", this->distance_sensor_);
   LOG_SENSOR("  ", "Presence", this->presence_sensor_);
-  ESP_LOGCONFIG("  ", "Throttle: %ums", this->throttle_ms_);
+  ESP_LOGCONFIG(TAG, "  Throttle: %ums", this->throttle_ms_);
 }
 
 }  // namespace hlk_ld2410s
