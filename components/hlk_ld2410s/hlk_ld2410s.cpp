@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 06:17:32 UTC
+ * Creation Date/Time: 2025-03-27 06:38:13 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -168,6 +168,12 @@
    ESP_LOGD(TAG, "Enabling configuration mode");
    
    uint8_t data[] = {0x01, 0x00};  // Enable configuration command value
+   
+   // Update sensor state before attempting command
+   if (config_mode_sensor_ != nullptr) {
+     config_mode_sensor_->publish_state(false);  // Reset to known state
+   }
+   
    if (write_command_(CMD_ENABLE_CONFIG, data, sizeof(data))) {
      if (read_ack_(CMD_ENABLE_CONFIG)) {
        ESP_LOGI(TAG, "Configuration mode enabled");
@@ -177,6 +183,16 @@
        }
      } else {
        ESP_LOGW(TAG, "Failed to enable configuration mode");
+       in_config_mode_ = false;
+       if (config_mode_sensor_ != nullptr) {
+         config_mode_sensor_->publish_state(false);
+       }
+     }
+   } else {
+     ESP_LOGW(TAG, "Failed to send enable configuration command");
+     in_config_mode_ = false;
+     if (config_mode_sensor_ != nullptr) {
+       config_mode_sensor_->publish_state(false);
      }
    }
  }
@@ -193,11 +209,21 @@
        }
      } else {
        ESP_LOGW(TAG, "Failed to disable configuration mode");
+       // Keep previous state if disable fails
+       if (config_mode_sensor_ != nullptr) {
+         config_mode_sensor_->publish_state(in_config_mode_);
+       }
+     }
+   } else {
+     ESP_LOGW(TAG, "Failed to send disable configuration command");
+     // Keep previous state if command fails
+     if (config_mode_sensor_ != nullptr) {
+       config_mode_sensor_->publish_state(in_config_mode_);
      }
    }
  }
  
- void esphome::hlk_ld2410s::HLKLD2410SComponent::set_response_speed(uint8_t speed) {
+ void HLKLD2410SComponent::set_response_speed(uint8_t speed) {
    if (!in_config_mode_) {
      ESP_LOGW(TAG, "Must be in configuration mode to set response speed");
      return;
