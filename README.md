@@ -76,7 +76,7 @@ The `hlk_ld2410s` component provides support for the Hi-Link HLK-LD2410S microwa
 1. If you see no data from the sensor, check:
    - UART wiring (TX/RX might need to be swapped)
    - UART configuration (baud rate, pins)
-   - Power supply (sensor requires stable 5V)
+   - Power supply (sensor requires stable 3.3V)
 
 2. If distance readings are unstable:
    - Try increasing the throttle time
