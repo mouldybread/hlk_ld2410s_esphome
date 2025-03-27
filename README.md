@@ -5,6 +5,9 @@ This repository contains an ESPHome component for the HLK LD2410S module.
 The code herein is AI generated. The existing ESPHome components I found didn't work so I gave the protocol specification to AI prompted it to write the code and troubleshoot. I really have no idea what I'm doing so I can't speak to the quality of this implementation but i've managed to make this work. It's here incase it's useful to someone else but I can't promise I'll be able to help with any issues should they arise.
 
 I've implemented quite extensive feature support but it has not been thoroughly tested. Presence and distance sensors are functional. This module doesn't have bluetooth and so can only be configured via serial. I've left the configuration out of the UI for simplicities sake, honestly the compilation is so fast it almost doesn't matter. 
+
+I'm using this with a Wemos D1 Mini ESP8266 board.
+
 ## Usage
 
 To use this component in your ESPHome configuration, add the following to your `.yaml` file:
