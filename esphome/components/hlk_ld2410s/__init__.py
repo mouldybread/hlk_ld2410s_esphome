@@ -1,1 +1,1 @@
-#Empty
+from . import hlk_ld2410s_sensor

@@ -3,6 +3,18 @@
 namespace esphome {
 namespace hlk_ld2410s {
 
+void HLK_LD2410S::setup() {
+  // Setup code here
+}
+
+void HLK_LD2410S::loop() {
+  while (available() > 0) {
+    uint8_t byte;
+    read_byte(&byte);
+    parse_byte(byte);
+  }
+}
+
 void HLK_LD2410S::parse_byte(uint8_t byte) {
   static uint8_t buffer[64];
   static uint8_t index = 0;
