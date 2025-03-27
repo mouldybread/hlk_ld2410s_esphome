@@ -1,7 +1,7 @@
 """HLK-LD2410S mmWave Radar Sensor integration for ESPHome.
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 15:01:49 UTC
+Creation Date/Time: 2025-03-27 15:05:02 UTC
 """
 
 import esphome.codegen as cg
@@ -71,11 +71,11 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_NEAREST_GATE, default=0): cv.int_range(min=0, max=15),
     cv.Optional(CONF_TRIGGER_THRESHOLDS): cv.All(
         cv.ensure_list(cv.int_range(min=0, max=100)),
-        cv.Length(exact=16),
+        cv.Length(min=16, max=16),  # Changed from exact=16 to min=16, max=16
     ),
     cv.Optional(CONF_HOLD_THRESHOLDS): cv.All(
         cv.ensure_list(cv.int_range(min=0, max=100)),
-        cv.Length(exact=16),
+        cv.Length(min=16, max=16),  # Changed from exact=16 to min=16, max=16
     ),
     cv.Optional(CONF_AUTO_THRESHOLD): AUTO_THRESHOLD_SCHEMA,
     cv.Optional(CONF_DISTANCE): sensor.sensor_schema(
