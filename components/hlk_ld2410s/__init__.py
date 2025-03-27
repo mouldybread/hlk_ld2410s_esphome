@@ -4,7 +4,7 @@ HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 SPDX-License-Identifier: GPL-3.0-only
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 06:12:07 UTC
+Creation Date/Time: 2025-03-27 06:17:32 UTC
 """
 
 import esphome.config_validation as cv

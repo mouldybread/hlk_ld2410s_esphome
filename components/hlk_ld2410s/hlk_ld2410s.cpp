@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 06:03:49 UTC
+ * Creation Date/Time: 2025-03-27 06:17:32 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -17,8 +17,6 @@
  // Protocol constants
  static const uint8_t CONFIG_FRAME_HEADER[] = {0xFD, 0xFC, 0xFB, 0xFA};
  static const uint8_t CONFIG_FRAME_END[] = {0x04, 0x03, 0x02, 0x01};
- static const uint16_t CMD_ENABLE_CONFIG = 0x00FF;
- static const uint16_t CMD_DISABLE_CONFIG = 0x00FE;
  
  HLKLD2410SComponent::HLKLD2410SComponent(uart::UARTComponent *parent) : uart::UARTDevice(parent) {
    ESP_LOGD(TAG, "Initializing HLK-LD2410S");
@@ -195,6 +193,29 @@
        }
      } else {
        ESP_LOGW(TAG, "Failed to disable configuration mode");
+     }
+   }
+ }
+ 
+ void esphome::hlk_ld2410s::HLKLD2410SComponent::set_response_speed(uint8_t speed) {
+   if (!in_config_mode_) {
+     ESP_LOGW(TAG, "Must be in configuration mode to set response speed");
+     return;
+   }
+ 
+   if (speed > 9) {
+     ESP_LOGW(TAG, "Invalid response speed value (0-9): %u", speed);
+     return;
+   }
+ 
+   ESP_LOGD(TAG, "Setting response speed to %u", speed);
+   
+   uint8_t data[] = {speed};
+   if (write_command_(CMD_SET_RESPONSE_SPEED, data, sizeof(data))) {
+     if (read_ack_(CMD_SET_RESPONSE_SPEED)) {
+       ESP_LOGI(TAG, "Response speed set to %u", speed);
+     } else {
+       ESP_LOGW(TAG, "Failed to set response speed");
      }
    }
  }
