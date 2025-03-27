@@ -4,7 +4,7 @@ HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 SPDX-License-Identifier: GPL-3.0-only
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 07:23:52 UTC
+Creation Date/Time: 2025-03-27 07:36:27 UTC
 """
 
 import esphome.config_validation as cv
@@ -32,6 +32,7 @@ CONF_DISABLE_CONFIG = "disable_configuration"
 CONF_CONFIG_MODE = "config_mode"
 CONF_RESPONSE_SPEED = "response_speed"
 CONF_RESPONSE_SPEED_SELECT = "response_speed_select"
+CONF_READ_FIRMWARE = "read_firmware"
 
 RESPONSE_SPEED_OPTIONS = [str(x) for x in range(10)]  # 0-9
 
@@ -41,6 +42,7 @@ HLKLD2410SComponent = hlk_ld2410s_ns.class_('HLKLD2410SComponent', cg.Component,
 EnableConfigButton = hlk_ld2410s_ns.class_('EnableConfigButton', button.Button)
 DisableConfigButton = hlk_ld2410s_ns.class_('DisableConfigButton', button.Button)
 ResponseSpeedSelect = hlk_ld2410s_ns.class_('ResponseSpeedSelect', select.Select, cg.Component)
+ReadFirmwareButton = hlk_ld2410s_ns.class_('ReadFirmwareButton', button.Button)
 
 # Configuration schema for the component
 CONFIG_SCHEMA = cv.Schema({
@@ -67,6 +69,7 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_RESPONSE_SPEED_SELECT): select.SELECT_SCHEMA.extend({
         cv.GenerateID(): cv.declare_id(ResponseSpeedSelect),
     }).extend(cv.COMPONENT_SCHEMA),
+    cv.Optional(CONF_READ_FIRMWARE): button.button_schema(ReadFirmwareButton),
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
@@ -105,3 +108,7 @@ async def to_code(config):
         await cg.register_component(sel, conf)
         await select.register_select(sel, conf, options=RESPONSE_SPEED_OPTIONS)
         cg.add(var.set_response_speed_select(sel))
+
+    if CONF_READ_FIRMWARE in config:
+        sens = cg.new_Pvariable(config[CONF_READ_FIRMWARE][CONF_ID], var)
+        await button.register_button(sens, config[CONF_READ_FIRMWARE])
