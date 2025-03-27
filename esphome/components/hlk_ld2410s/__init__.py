@@ -1,1 +1,1 @@
-from . import hlk_ld2410s_sensor
+from .sensor import hlk_ld2410s_sensor

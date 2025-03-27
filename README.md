@@ -33,7 +33,6 @@ hlk_ld2410s:
 
 sensor:
   - platform: hlk_ld2410s
-    id: my_ld2410s
     distance:
       name: "HLK LD2410S Distance"
       unit_of_measurement: "cm"
