@@ -9,19 +9,22 @@ from esphome.const import (
     ICON_RULER,
     ICON_MOTION_SENSOR,
 )
-from esphome.components import sensor, uart, binary_sensor
-from esphome.components.binary_sensor import BinarySensor
+from esphome.components import sensor, uart, binary_sensor, button
 
 DEPENDENCIES = ['uart']
-AUTO_LOAD = ['sensor', 'binary_sensor']
+AUTO_LOAD = ['sensor', 'binary_sensor', 'button']
 
 # Define our own constants
 CONF_PRESENCE = "presence"
 CONF_UART_ID = "uart_id"
 CONF_THROTTLE = "throttle"
+CONF_ENABLE_CONFIG = "enable_configuration"
+CONF_DISABLE_CONFIG = "disable_configuration"
 
 hlk_ld2410s_ns = cg.esphome_ns.namespace('hlk_ld2410s')
 HLKLD2410SComponent = hlk_ld2410s_ns.class_('HLKLD2410SComponent', cg.Component, uart.UARTDevice)
+EnableConfigButton = hlk_ld2410s_ns.class_('EnableConfigButton', button.Button)
+DisableConfigButton = hlk_ld2410s_ns.class_('DisableConfigButton', button.Button)
 
 # Configuration schema for the component
 CONFIG_SCHEMA = cv.Schema({
@@ -38,12 +41,13 @@ CONFIG_SCHEMA = cv.Schema({
         device_class="occupancy",
         icon=ICON_MOTION_SENSOR,
     ),
+    cv.Optional(CONF_ENABLE_CONFIG): button.button_schema(),
+    cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(),
     cv.Optional(CONF_THROTTLE): cv.positive_time_period_milliseconds,
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
-    uart_component = await cg.get_variable(config[CONF_UART_ID])
-    var = cg.new_Pvariable(config[CONF_ID], uart_component)
+    var = cg.new_Pvariable(config[CONF_ID], await cg.get_variable(config[CONF_UART_ID]))
     await cg.register_component(var, config)
     
     if CONF_DISTANCE in config:
@@ -53,6 +57,16 @@ async def to_code(config):
     if CONF_PRESENCE in config:
         sens = await binary_sensor.new_binary_sensor(config[CONF_PRESENCE])
         cg.add(var.set_presence_sensor(sens))
+
+    if CONF_ENABLE_CONFIG in config:
+        sens = cg.new_Pvariable(config[CONF_ENABLE_CONFIG].get(CONF_ID), var)
+        await button.register_button(sens, config[CONF_ENABLE_CONFIG])
+        cg.add(var.set_enable_config_button(sens))
+
+    if CONF_DISABLE_CONFIG in config:
+        sens = cg.new_Pvariable(config[CONF_DISABLE_CONFIG].get(CONF_ID), var)
+        await button.register_button(sens, config[CONF_DISABLE_CONFIG])
+        cg.add(var.set_disable_config_button(sens))
 
     if CONF_THROTTLE in config:
         cg.add(var.set_throttle(config[CONF_THROTTLE]))
