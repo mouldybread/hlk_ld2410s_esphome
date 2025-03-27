@@ -4,7 +4,7 @@ HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 SPDX-License-Identifier: GPL-3.0-only
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 07:08:29 UTC
+Creation Date/Time: 2025-03-27 07:11:46 UTC
 """
 
 import esphome.config_validation as cv
@@ -17,6 +17,7 @@ from esphome.const import (
     STATE_CLASS_MEASUREMENT,
     ICON_RULER,
     ICON_MOTION_SENSOR,
+    CONF_INITIAL_VALUE,
 )
 from esphome.components import sensor, uart, binary_sensor, button, select
 
@@ -66,7 +67,7 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_RESPONSE_SPEED): cv.int_range(min=0, max=9),
     cv.Optional(CONF_RESPONSE_SPEED_SELECT): select.SELECT_SCHEMA.extend({
         cv.GenerateID(): cv.declare_id(ResponseSpeedSelect),
-        cv.Optional(select.CONF_INITIAL_OPTION): cv.string,
+        cv.Optional(CONF_INITIAL_VALUE): cv.string,
     }).extend(cv.COMPONENT_SCHEMA),
 }).extend(cv.COMPONENT_SCHEMA)
 
@@ -104,8 +105,13 @@ async def to_code(config):
         conf = config[CONF_RESPONSE_SPEED_SELECT]
         sel = await select.new_select(conf)
         await cg.register_component(sel, conf)
-        if select.CONF_INITIAL_OPTION in conf:
-            cg.add(sel.set_initial_option(conf[select.CONF_INITIAL_OPTION]))
+        
+        # Add all options
         for opt in RESPONSE_SPEED_OPTIONS:
             cg.add(sel.add_option(opt))
+            
+        # Set initial value if specified
+        if CONF_INITIAL_VALUE in conf:
+            cg.add(sel.set_initial_option(conf[CONF_INITIAL_VALUE]))
+        
         cg.add(var.set_response_speed_select(sel))
