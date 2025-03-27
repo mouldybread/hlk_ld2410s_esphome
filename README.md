@@ -6,7 +6,7 @@ This repository contains the ESPHome component for the HLK LD2410S module.
 
 To use this component in your ESPHome configuration, add the following to your `.yaml` file:
 
-```
+```yaml
 external_components:
   - source: github://mouldybread/hlk_ld2410s_esphome
 
