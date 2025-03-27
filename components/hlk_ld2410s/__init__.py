@@ -2,7 +2,7 @@
 HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 12:03:26 UTC
+Creation Date/Time: 2025-03-27 12:06:17 UTC
 """
 
 import esphome.codegen as cg
@@ -20,7 +20,7 @@ from esphome.const import (
     CONF_UNIT_OF_MEASUREMENT,
     DEVICE_CLASS_DISTANCE,
     DEVICE_CLASS_MOTION,
-    ICON_RADIATOR,  # Using as radar icon
+    ICON_RADIATOR,
     ICON_MOTION_SENSOR,
     ICON_RULER,
     ICON_TIMER,
@@ -106,12 +106,16 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_CONFIG_MODE): binary_sensor.binary_sensor_schema(
                 icon=ICON_RADAR,
             ),
-            cv.Optional(CONF_ENABLE_CONFIG): button.button_schema(
-                icon=ICON_RADAR,
-            ),
-            cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(
-                icon=ICON_RADAR,
-            ),
+            cv.Optional(CONF_ENABLE_CONFIG): cv.Schema({
+                cv.GenerateID(): cv.declare_id(EnableConfigButton),
+                cv.Optional(CONF_NAME): cv.string,
+                cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
+            }).extend(cv.COMPONENT_SCHEMA),
+            cv.Optional(CONF_DISABLE_CONFIG): cv.Schema({
+                cv.GenerateID(): cv.declare_id(DisableConfigButton),
+                cv.Optional(CONF_NAME): cv.string,
+                cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
+            }).extend(cv.COMPONENT_SCHEMA),
             cv.Optional(CONF_UNMANNED_DELAY, default=0): cv.int_range(
                 min=MIN_UNMANNED_DELAY, max=MAX_UNMANNED_DELAY
             ),
@@ -157,11 +161,15 @@ async def to_code(config):
         cg.add(var.set_config_mode_sensor(sens))
 
     if CONF_ENABLE_CONFIG in config:
-        btn = await button.new_button(config[CONF_ENABLE_CONFIG])
+        conf = config[CONF_ENABLE_CONFIG]
+        btn = cg.new_Pvariable(conf[CONF_ID])
+        await cg.register_component(btn, conf)
         cg.add(var.set_enable_config_button(btn))
 
     if CONF_DISABLE_CONFIG in config:
-        btn = await button.new_button(config[CONF_DISABLE_CONFIG])
+        conf = config[CONF_DISABLE_CONFIG]
+        btn = cg.new_Pvariable(conf[CONF_ID])
+        await cg.register_component(btn, conf)
         cg.add(var.set_disable_config_button(btn))
 
     if CONF_UNMANNED_DELAY in config:
