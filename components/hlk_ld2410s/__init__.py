@@ -1,7 +1,7 @@
 """HLK-LD2410S mmWave Radar Sensor integration for ESPHome.
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 14:58:36 UTC
+Creation Date/Time: 2025-03-27 15:01:49 UTC
 """
 
 import esphome.codegen as cg
@@ -17,7 +17,7 @@ from esphome.const import (
     DEVICE_CLASS_RUNNING,
     STATE_CLASS_MEASUREMENT,
     UNIT_METER,
-    ICON_RADAR,
+    ICON_MOTION_SENSOR,
 )
 
 DEPENDENCIES = ['uart']
@@ -100,7 +100,7 @@ for i in range(16):
         cv.Optional(CONF_GATE_ENERGY.format(i)): sensor.sensor_schema(
             accuracy_decimals=0,
             state_class=STATE_CLASS_MEASUREMENT,
-            icon=ICON_RADAR,
+            icon=ICON_MOTION_SENSOR,
         ),
     })
 
@@ -177,4 +177,4 @@ async def to_code(config):
             sens = await sensor.new_sensor(gate_conf)
             cg.add(var.set_gate_energy_sensor(i, sens))
 
-hlk_ld2410s_ns.end_namespace()  # Add namespace closure
+hlk_ld2410s_ns.end_namespace()
