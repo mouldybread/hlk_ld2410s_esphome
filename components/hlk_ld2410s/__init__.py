@@ -4,7 +4,7 @@ HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 SPDX-License-Identifier: GPL-3.0-only
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 06:05:29 UTC
+Creation Date/Time: 2025-03-27 06:12:07 UTC
 """
 
 import esphome.config_validation as cv
@@ -23,12 +23,14 @@ from esphome.components import sensor, uart, binary_sensor, button
 DEPENDENCIES = ['uart']
 AUTO_LOAD = ['sensor', 'binary_sensor', 'button']
 
+# Configuration options
 CONF_PRESENCE = "presence"
 CONF_UART_ID = "uart_id"
 CONF_THROTTLE = "throttle"
 CONF_ENABLE_CONFIG = "enable_configuration"
 CONF_DISABLE_CONFIG = "disable_configuration"
 CONF_CONFIG_MODE = "config_mode"
+CONF_RESPONSE_SPEED = "response_speed"
 
 # Generate namespaces
 hlk_ld2410s_ns = cg.esphome_ns.namespace('hlk_ld2410s')
@@ -57,6 +59,7 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_ENABLE_CONFIG): button.button_schema(EnableConfigButton),
     cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(DisableConfigButton),
     cv.Optional(CONF_THROTTLE): cv.positive_time_period_milliseconds,
+    cv.Optional(CONF_RESPONSE_SPEED): cv.int_range(min=0, max=9),
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
@@ -88,3 +91,6 @@ async def to_code(config):
 
     if CONF_THROTTLE in config:
         cg.add(var.set_throttle(config[CONF_THROTTLE]))
+
+    if CONF_RESPONSE_SPEED in config:
+        cg.add(var.set_response_speed(config[CONF_RESPONSE_SPEED]))
