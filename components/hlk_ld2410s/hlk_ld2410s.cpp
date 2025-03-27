@@ -2,7 +2,7 @@
  * HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
  * 
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 13:58:04 UTC
+ * Creation Date/Time: 2025-03-27 14:02:00 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -11,7 +11,7 @@
  namespace esphome {
  namespace hlk_ld2410s {
  
- static const uint32_t UART_BAUD_RATE = 256000;
+ static const uint32_t UART_BAUD_RATE = 115200;
  static const uint32_t UART_READ_TIMEOUT_MS = 50;
  static const uint32_t COMMAND_DELAY_MS = 100;
  static const size_t RX_BUFFER_SIZE = 256;
@@ -40,7 +40,7 @@
  void HLKLD2410SComponent::check_uart_settings_() {
      auto *uart = (UARTComponent *)this->parent_;
      if (uart->get_baud_rate() != UART_BAUD_RATE) {
-         ESP_LOGE(TAG, "Incorrect baud rate! HLK-LD2410S requires 256000 baud. Current: %u", uart->get_baud_rate());
+         ESP_LOGE(TAG, "Incorrect baud rate! HLK-LD2410S requires 115200 baud. Current: %u", uart->get_baud_rate());
      }
      ESP_LOGI(TAG, "UART Settings - Baud: %u, Data Bits: 8, Stop Bits: 1, Parity: None", uart->get_baud_rate());
  }
@@ -271,28 +271,54 @@
  
  bool HLKLD2410SComponent::read_ack_(CommandWord expected_cmd) {
      uint32_t start = millis();
+     std::vector<uint8_t> buffer;
+     buffer.reserve(32);  // Reserve space for the ACK frame
+     
+     ESP_LOGD(TAG, "Waiting for ACK for command 0x%04X", static_cast<uint16_t>(expected_cmd));
      
      while (millis() - start < ACK_TIMEOUT_MS) {
-         if (available() >= CONFIG_FRAME_MIN_LENGTH) {
-             uint8_t header[4];
-             if (read_array(header, sizeof(header)) == sizeof(header) && 
-                 verify_frame_header_(header, sizeof(header))) {
-                 
-                 uint8_t cmd_bytes[2];
-                 if (read_array(cmd_bytes, sizeof(cmd_bytes)) == sizeof(cmd_bytes)) {
-                     uint16_t received_cmd = (cmd_bytes[0] << 8) | cmd_bytes[1];
-                     
-                     if (received_cmd == static_cast<uint16_t>(expected_cmd)) {
-                         ESP_LOGI(TAG, "Command 0x%04X acknowledged", static_cast<uint16_t>(expected_cmd));
-                         return true;
+         if (available()) {
+             uint8_t byte;
+             read_byte(&byte);
+             buffer.push_back(byte);
+             dump_data_("ACK buffer", buffer.data(), buffer.size());
+             
+             // Look for frame header in the buffer
+             if (buffer.size() >= 4) {
+                 for (size_t i = 0; i <= buffer.size() - 4; i++) {
+                     if (buffer[i] == 0xFD && 
+                         buffer[i+1] == 0xFC && 
+                         buffer[i+2] == 0xFB && 
+                         buffer[i+3] == 0xFA) {
+                         
+                         // Found header, ensure we have enough data for a complete ACK frame
+                         if (buffer.size() >= i + 8) {  // Header(4) + Command(2) + Status(2)
+                             uint16_t received_cmd = (buffer[i+4] << 8) | buffer[i+5];
+                             uint16_t status = (buffer[i+6] << 8) | buffer[i+7];
+                             
+                             ESP_LOGD(TAG, "Received ACK - CMD: 0x%04X, Status: 0x%04X", 
+                                      received_cmd, status);
+                             
+                             if (received_cmd == static_cast<uint16_t>(expected_cmd)) {
+                                 ESP_LOGI(TAG, "Command 0x%04X acknowledged with status 0x%04X", 
+                                         static_cast<uint16_t>(expected_cmd), status);
+                                 return (status == 0x0000);
+                             }
+                         }
                      }
                  }
              }
+             
+             // Prevent buffer from growing too large
+             if (buffer.size() > 64) {
+                 buffer.erase(buffer.begin(), buffer.begin() + 32);
+             }
          }
-         delay(10);
+         delay(1);
      }
      
-     ESP_LOGW(TAG, "Command 0x%04X not acknowledged within timeout", static_cast<uint16_t>(expected_cmd));
+     ESP_LOGW(TAG, "Command 0x%04X not acknowledged within timeout", 
+              static_cast<uint16_t>(expected_cmd));
      return false;
  }
  
