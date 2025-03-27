@@ -2,12 +2,13 @@
  * HLK-LD2410S mmWave Radar Sensor component for ESPHome.
  * 
  * Author: github.com/mouldybread
- * Created: 2025-03-27 15:32:08 UTC
+ * Created: 2025-03-27 15:42:08 UTC
  */
 
  #pragma once
 
  #include "esphome/core/component.h"
+ #include "esphome/core/helpers.h"
  #include "esphome/components/uart/uart.h"
  #include "esphome/components/sensor/sensor.h"
  #include "esphome/components/binary_sensor/binary_sensor.h"
@@ -111,7 +112,14 @@
  
  class HLKLD2410SComponent : public Component, public uart::UARTDevice {
   public:
+     // Default constructor for ESPHome registration
+     HLKLD2410SComponent() = default;
+     
+     // Constructor with UART parent
      explicit HLKLD2410SComponent(uart::UARTComponent *parent) : uart::UARTDevice(parent) {}
+ 
+     // Method to set UART parent after construction
+     void set_uart_parent(uart::UARTComponent *parent) { set_uart_parent_(parent); }
  
      void setup() override;
      void loop() override;

@@ -1,8 +1,8 @@
 /**
  * Implementation of HLK-LD2410S mmWave Radar Sensor component for ESPHome.
  * 
- * Author: github.com/mouldybread
- * Created: 2025-03-27 15:32:08 UTC
+ * Author: mouldybread
+ * Created: 2025-03-27 15:44:50 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -18,7 +18,6 @@
  void DisableConfigButton::press_action() {
      this->parent_->disable_configuration_();
  }
- 
  
  void HLKLD2410SComponent::setup() {
      ESP_LOGCONFIG(TAG, "Setting up HLK-LD2410S...");
@@ -245,45 +244,19 @@
  }
  
  bool HLKLD2410SComponent::enable_configuration_() {
-     std::vector<uint8_t> data;
-     data.insert(data.end(), CONFIG_FRAME_HEADER, CONFIG_FRAME_HEADER + 4);
-     data.push_back(0x04);  // Length low byte
-     data.push_back(0x00);  // Length high byte
-     data.push_back(0x04);  // Command (Enable Configuration)
-     data.push_back(0x00);  // Reserved
- 
-     data.push_back(this->calculate_checksum_(data));
-     if (!this->write_array_(data)) {
-         ESP_LOGE(TAG, "%s: Failed to send enable configuration command", ERROR_COMMUNICATION);
-         return false;
-     }
- 
      if (this->config_mode_sensor_ != nullptr) {
          this->config_mode_sensor_->publish_state(true);
      }
  
-     return this->wait_for_ack_();
+     return this->send_command_(CommandWord::ENABLE_CONFIGURATION);
  }
  
  bool HLKLD2410SComponent::disable_configuration_() {
-     std::vector<uint8_t> data;
-     data.insert(data.end(), CONFIG_FRAME_HEADER, CONFIG_FRAME_HEADER + 4);
-     data.push_back(0x04);  // Length low byte
-     data.push_back(0x00);  // Length high byte
-     data.push_back(0x05);  // Command (Disable Configuration)
-     data.push_back(0x00);  // Reserved
- 
-     data.push_back(this->calculate_checksum_(data));
-     if (!this->write_array_(data)) {
-         ESP_LOGE(TAG, "%s: Failed to send disable configuration command", ERROR_COMMUNICATION);
-         return false;
-     }
- 
      if (this->config_mode_sensor_ != nullptr) {
          this->config_mode_sensor_->publish_state(false);
      }
  
-     return this->wait_for_ack_();
+     return this->send_command_(CommandWord::DISABLE_CONFIGURATION);
  }
  
  void HLKLD2410SComponent::apply_cached_config_() {
@@ -483,6 +456,5 @@
      return this->send_command_(CommandWord::WRITE_HOLD_THRESHOLD, this->hold_thresholds_);
  }
  
-
-}  // namespace hlk_ld2410s
-}  // namespace esphome
+ }  // namespace hlk_ld2410s
+ }  // namespace esphome
