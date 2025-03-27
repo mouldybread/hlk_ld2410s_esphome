@@ -41,8 +41,8 @@ CONFIG_SCHEMA = cv.Schema({
         device_class="occupancy",
         icon=ICON_MOTION_SENSOR,
     ),
-    cv.Optional(CONF_ENABLE_CONFIG): button.button_schema(),
-    cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(),
+    cv.Optional(CONF_ENABLE_CONFIG): button.button_schema(EnableConfigButton),  # Added class parameter
+    cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(DisableConfigButton),  # Added class parameter
     cv.Optional(CONF_THROTTLE): cv.positive_time_period_milliseconds,
 }).extend(cv.COMPONENT_SCHEMA)
 
@@ -59,12 +59,12 @@ async def to_code(config):
         cg.add(var.set_presence_sensor(sens))
 
     if CONF_ENABLE_CONFIG in config:
-        sens = cg.new_Pvariable(config[CONF_ENABLE_CONFIG].get(CONF_ID), var)
+        sens = cg.new_Pvariable(config[CONF_ENABLE_CONFIG][CONF_ID], var)
         await button.register_button(sens, config[CONF_ENABLE_CONFIG])
         cg.add(var.set_enable_config_button(sens))
 
     if CONF_DISABLE_CONFIG in config:
-        sens = cg.new_Pvariable(config[CONF_DISABLE_CONFIG].get(CONF_ID), var)
+        sens = cg.new_Pvariable(config[CONF_DISABLE_CONFIG][CONF_ID], var)
         await button.register_button(sens, config[CONF_DISABLE_CONFIG])
         cg.add(var.set_disable_config_button(sens))
 
