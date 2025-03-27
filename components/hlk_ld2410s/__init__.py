@@ -1,3 +1,12 @@
+"""
+HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
+
+SPDX-License-Identifier: GPL-3.0-only
+
+Created by github.com/mouldybread
+Creation Date/Time: 2025-03-27 06:05:29 UTC
+"""
+
 import esphome.config_validation as cv
 import esphome.codegen as cg
 from esphome.const import (
@@ -14,13 +23,14 @@ from esphome.components import sensor, uart, binary_sensor, button
 DEPENDENCIES = ['uart']
 AUTO_LOAD = ['sensor', 'binary_sensor', 'button']
 
-# Define our own constants
 CONF_PRESENCE = "presence"
 CONF_UART_ID = "uart_id"
 CONF_THROTTLE = "throttle"
 CONF_ENABLE_CONFIG = "enable_configuration"
 CONF_DISABLE_CONFIG = "disable_configuration"
+CONF_CONFIG_MODE = "config_mode"
 
+# Generate namespaces
 hlk_ld2410s_ns = cg.esphome_ns.namespace('hlk_ld2410s')
 HLKLD2410SComponent = hlk_ld2410s_ns.class_('HLKLD2410SComponent', cg.Component, uart.UARTDevice)
 EnableConfigButton = hlk_ld2410s_ns.class_('EnableConfigButton', button.Button)
@@ -41,12 +51,16 @@ CONFIG_SCHEMA = cv.Schema({
         device_class="occupancy",
         icon=ICON_MOTION_SENSOR,
     ),
-    cv.Optional(CONF_ENABLE_CONFIG): button.button_schema(EnableConfigButton),  # Added class parameter
-    cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(DisableConfigButton),  # Added class parameter
+    cv.Optional(CONF_CONFIG_MODE): binary_sensor.binary_sensor_schema(
+        icon="mdi:cog",
+    ),
+    cv.Optional(CONF_ENABLE_CONFIG): button.button_schema(EnableConfigButton),
+    cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(DisableConfigButton),
     cv.Optional(CONF_THROTTLE): cv.positive_time_period_milliseconds,
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
+    """Generate code for HLK-LD2410S component."""
     var = cg.new_Pvariable(config[CONF_ID], await cg.get_variable(config[CONF_UART_ID]))
     await cg.register_component(var, config)
     
@@ -57,6 +71,10 @@ async def to_code(config):
     if CONF_PRESENCE in config:
         sens = await binary_sensor.new_binary_sensor(config[CONF_PRESENCE])
         cg.add(var.set_presence_sensor(sens))
+
+    if CONF_CONFIG_MODE in config:
+        sens = await binary_sensor.new_binary_sensor(config[CONF_CONFIG_MODE])
+        cg.add(var.set_config_mode_sensor(sens))
 
     if CONF_ENABLE_CONFIG in config:
         sens = cg.new_Pvariable(config[CONF_ENABLE_CONFIG][CONF_ID], var)

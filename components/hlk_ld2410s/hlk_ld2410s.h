@@ -22,6 +22,7 @@ class HLKLD2410SComponent : public Component, public uart::UARTDevice {
 
   void set_distance_sensor(sensor::Sensor *sensor) { distance_sensor_ = sensor; }
   void set_presence_sensor(binary_sensor::BinarySensor *sensor) { presence_sensor_ = sensor; }
+  void set_config_mode_sensor(binary_sensor::BinarySensor *sensor) { config_mode_sensor_ = sensor; }
   void set_throttle(uint32_t throttle_ms) { throttle_ms_ = throttle_ms; }
   void set_enable_config_button(button::Button *button) { enable_config_button_ = button; }
   void set_disable_config_button(button::Button *button) { disable_config_button_ = button; }
@@ -33,6 +34,7 @@ class HLKLD2410SComponent : public Component, public uart::UARTDevice {
  protected:
   sensor::Sensor *distance_sensor_{nullptr};
   binary_sensor::BinarySensor *presence_sensor_{nullptr};
+  binary_sensor::BinarySensor *config_mode_sensor_{nullptr};
   button::Button *enable_config_button_{nullptr};
   button::Button *disable_config_button_{nullptr};
   uint32_t throttle_ms_{0};  // Throttle in milliseconds
@@ -49,7 +51,7 @@ class EnableConfigButton : public button::Button {
   explicit EnableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
 
  protected:
-  void press_action() override {  // Changed from press() to press_action()
+  void press_action() override {
     parent_->enable_configuration();
   }
 
@@ -61,7 +63,7 @@ class DisableConfigButton : public button::Button {
   explicit DisableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
 
  protected:
-  void press_action() override {  // Changed from press() to press_action()
+  void press_action() override {
     parent_->disable_configuration();
   }
 
