@@ -19,8 +19,8 @@ CONFIG_SCHEMA = cv.Schema({
 def to_code(config):
     parent = yield cg.get_variable(config[CONF_HLK_LD2410S_ID])
     if CONF_DISTANCE in config:
-        sens = yield sensor.new_sensor(config[CONF_DISTANCE])
-        cg.add(parent.set_distance_sensor(sens))
+        distance_sensor = yield sensor.new_sensor(config[CONF_DISTANCE])
+        cg.add(parent.set_distance_sensor(distance_sensor))
     if CONF_PRESENCE in config:
-        sens = yield sensor.new_sensor(config[CONF_PRESENCE])
-        cg.add(parent.set_presence_sensor(sens))
+        presence_sensor = yield sensor.new_sensor(config[CONF_PRESENCE])
+        cg.add(parent.set_presence_sensor(presence_sensor))
