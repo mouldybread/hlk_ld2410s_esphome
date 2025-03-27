@@ -31,6 +31,7 @@ logger:
     hlk_ld2410s: DEBUG
 
 # Enable Home Assistant API
+# API Encryption is disabled as it sometimes causes issues when used with HLK modules
 api:
 
 ota:
