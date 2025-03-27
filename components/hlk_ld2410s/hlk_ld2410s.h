@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 11:15:34 UTC
+ * Creation Date/Time: 2025-03-27 11:29:06 UTC
  */
 
  #pragma once
@@ -19,6 +19,28 @@
  namespace hlk_ld2410s {
  
  static const char *const TAG = "hlk_ld2410s";
+ 
+ // Forward declaration of main component class
+ class HLKLD2410SComponent;
+ 
+ // Button class definitions
+ class EnableConfigButton : public button::Button {
+  public:
+   explicit EnableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
+   
+  protected:
+   void press() override;
+   HLKLD2410SComponent *parent_;
+ };
+ 
+ class DisableConfigButton : public button::Button {
+  public:
+   explicit DisableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
+   
+  protected:
+   void press() override;
+   HLKLD2410SComponent *parent_;
+ };
  
  // Protocol Constants
  static const uint8_t MINIMAL_FRAME_HEADER = 0x6E;
@@ -71,7 +93,7 @@
    void set_disable_config_button(button::Button *button) { disable_config_button_ = button; }
    void set_response_speed_select(select::Select *select) { response_speed_select_ = select; }
    
-   // Configuration commands
+   // Configuration commands - made public for button access
    void enable_configuration();
    void disable_configuration();
    void set_response_speed(uint8_t speed);

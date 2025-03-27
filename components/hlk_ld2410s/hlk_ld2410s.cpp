@@ -813,5 +813,13 @@ void HLKLD2410SComponent::dump_config() {
   }
 }
 
+void EnableConfigButton::press() {
+  this->parent_->enable_configuration();
+}
+
+void DisableConfigButton::press() {
+  this->parent_->disable_configuration();
+}
+
 }  // namespace hlk_ld2410s
 }  // namespace esphome
