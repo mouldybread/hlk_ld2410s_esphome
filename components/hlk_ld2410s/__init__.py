@@ -4,7 +4,7 @@ HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 SPDX-License-Identifier: GPL-3.0-only
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 11:12:54 UTC
+Creation Date/Time: 2025-03-27 11:24:24 UTC
 """
 
 import esphome.config_validation as cv
@@ -54,8 +54,15 @@ DisableConfigButton = hlk_ld2410s_ns.class_('DisableConfigButton', button.Button
 ResponseSpeedSelect = hlk_ld2410s_ns.class_('ResponseSpeedSelect', select.Select, cg.Component)
 
 # Validators
-RESPONSE_SPEED_OPTIONS = ["Normal", "Fast"]
-OUTPUT_MODE_OPTIONS = ["Minimal", "Standard"]
+RESPONSE_SPEED_OPTIONS = {
+    "normal": "Normal",
+    "fast": "Fast"
+}
+
+OUTPUT_MODE_OPTIONS = {
+    "minimal": "Minimal",
+    "standard": "Standard"
+}
 
 THRESHOLD_SCHEMA = cv.Schema({
     cv.Required(CONF_NAME): cv.string,
@@ -98,8 +105,8 @@ CONFIG_SCHEMA = cv.Schema({
     
     # Basic settings
     cv.Optional(CONF_THROTTLE): cv.positive_time_period_milliseconds,
-    cv.Optional(CONF_OUTPUT_MODE, default="Minimal"): cv.enum(OUTPUT_MODE_OPTIONS, upper=False),
-    cv.Optional(CONF_RESPONSE_SPEED, default="Normal"): cv.enum(RESPONSE_SPEED_OPTIONS, upper=False),
+    cv.Optional(CONF_OUTPUT_MODE, default="minimal"): cv.enum(OUTPUT_MODE_OPTIONS, lower=True),
+    cv.Optional(CONF_RESPONSE_SPEED, default="normal"): cv.enum(RESPONSE_SPEED_OPTIONS, lower=True),
     
     # General parameters
     cv.Optional(CONF_UNMANNED_DELAY, default=40): cv.int_range(min=10, max=120),
@@ -156,11 +163,11 @@ async def to_code(config):
         cg.add(var.set_throttle(config[CONF_THROTTLE]))
     
     # Set output mode
-    if config[CONF_OUTPUT_MODE] == "Standard":
+    if config[CONF_OUTPUT_MODE] == "standard":
         cg.add(var.switch_output_mode(True))
     
     # Set response speed
-    speed_value = 5 if config[CONF_RESPONSE_SPEED] == "Normal" else 10
+    speed_value = 5 if config[CONF_RESPONSE_SPEED] == "normal" else 10
     cg.add(var.set_response_speed(speed_value))
     
     # Configure general parameters
