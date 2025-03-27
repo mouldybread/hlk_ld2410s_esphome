@@ -2,7 +2,7 @@
 HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 12:12:36 UTC
+Creation Date/Time: 2025-03-27 12:14:13 UTC
 """
 
 import esphome.codegen as cg
@@ -28,7 +28,6 @@ from esphome.const import (
     STATE_CLASS_MEASUREMENT,
     UNIT_METER,
 )
-from esphome.components.button import ButtonEntity
 
 CODEOWNERS = ["@mouldybread"]
 DEPENDENCIES = ["uart"]
@@ -39,10 +38,10 @@ HLKLD2410SComponent = hlk_ld2410s_ns.class_(
     "HLKLD2410SComponent", cg.Component, uart.UARTDevice
 )
 EnableConfigButton = hlk_ld2410s_ns.class_(
-    "EnableConfigButton", ButtonEntity, cg.Component
+    "EnableConfigButton", button.Button, cg.Component
 )
 DisableConfigButton = hlk_ld2410s_ns.class_(
-    "DisableConfigButton", ButtonEntity, cg.Component
+    "DisableConfigButton", button.Button, cg.Component
 )
 
 # Configuration keys
@@ -74,6 +73,7 @@ UNIT_PERCENT = "%"
 UNIT_HERTZ = "Hz"
 
 ICON_RADAR = "mdi:radar"
+ICON_ENERGY = "mdi:lightning-bolt"
 
 GATE_COUNT = 16
 MAX_THRESHOLD = 100
@@ -88,13 +88,13 @@ AUTO_THRESHOLD_SCHEMA = cv.Schema({
     cv.Required(CONF_SCAN_TIME): cv.int_range(min=0, max=120),
 })
 
-ENABLE_BUTTON_SCHEMA = button.BUTTON_SCHEMA.extend({
+ENABLE_BUTTON_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(EnableConfigButton),
     cv.Optional(CONF_NAME): cv.string,
     cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
 }).extend(cv.COMPONENT_SCHEMA)
 
-DISABLE_BUTTON_SCHEMA = button.BUTTON_SCHEMA.extend({
+DISABLE_BUTTON_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(DisableConfigButton),
     cv.Optional(CONF_NAME): cv.string,
     cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
