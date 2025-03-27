@@ -8,7 +8,8 @@ CONF_HLK_LD2410S_ID = 'hlk_ld2410s_id'
 CONF_DISTANCE = 'distance'
 CONF_PRESENCE = 'presence'
 
-HLKLD2410SSensor = hlk_ld2410s_ns.class_('HLKLD2410SSensor', sensor.Sensor)
+# This class does not seem to be utilized, commenting out for now
+# HLKLD2410SSensor = hlk_ld2410s_ns.class_('HLKLD2410SSensor', sensor.Sensor)
 
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(CONF_HLK_LD2410S_ID): cv.use_id(HLKLD2410SComponent),
