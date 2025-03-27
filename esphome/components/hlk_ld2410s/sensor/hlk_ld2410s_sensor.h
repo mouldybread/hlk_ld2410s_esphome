@@ -8,20 +8,12 @@ namespace hlk_ld2410s {
 
 class HLKLD2410SSensor : public sensor::Sensor, public PollingComponent {
  public:
-  void setup() override {
-    this->hlk_ld2410s_->setup();
-  }
-
-  void update() override {
-    this->hlk_ld2410s_->loop();
-  }
-
-  void set_hlk_ld2410s(HLK_LD2410S *hlk_ld2410s) {
-    this->hlk_ld2410s_ = hlk_ld2410s;
-  }
+  void setup() override;
+  void update() override;
+  void set_hlk_ld2410s(HLK_LD2410S *hlk_ld2410s);
 
  private:
-  HLK_LD2410S *hlk_ld2410s_;
+  HLK_LD2410S *hlk_ld2410s_ = nullptr;
 };
 
 }  // namespace hlk_ld2410s
