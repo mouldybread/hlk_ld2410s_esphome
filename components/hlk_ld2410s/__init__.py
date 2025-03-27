@@ -4,7 +4,7 @@ HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 SPDX-License-Identifier: GPL-3.0-only
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 07:14:26 UTC
+Creation Date/Time: 2025-03-27 07:23:52 UTC
 """
 
 import esphome.config_validation as cv
@@ -17,7 +17,6 @@ from esphome.const import (
     STATE_CLASS_MEASUREMENT,
     ICON_RULER,
     ICON_MOTION_SENSOR,
-    CONF_INITIAL_VALUE,
 )
 from esphome.components import sensor, uart, binary_sensor, button, select
 
@@ -65,11 +64,9 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(DisableConfigButton),
     cv.Optional(CONF_THROTTLE): cv.positive_time_period_milliseconds,
     cv.Optional(CONF_RESPONSE_SPEED): cv.int_range(min=0, max=9),
-    cv.Optional(CONF_RESPONSE_SPEED_SELECT): select.select_schema(
-        ResponseSpeedSelect,
-        options=RESPONSE_SPEED_OPTIONS,
-        icon="mdi:speedometer",
-    ),
+    cv.Optional(CONF_RESPONSE_SPEED_SELECT): select.SELECT_SCHEMA.extend({
+        cv.GenerateID(): cv.declare_id(ResponseSpeedSelect),
+    }).extend(cv.COMPONENT_SCHEMA),
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
@@ -104,5 +101,7 @@ async def to_code(config):
 
     if CONF_RESPONSE_SPEED_SELECT in config:
         conf = config[CONF_RESPONSE_SPEED_SELECT]
-        sel = await select.new_select(conf, options=RESPONSE_SPEED_OPTIONS)
+        sel = cg.new_Pvariable(conf[CONF_ID], var)
+        await cg.register_component(sel, conf)
+        await select.register_select(sel, conf, options=RESPONSE_SPEED_OPTIONS)
         cg.add(var.set_response_speed_select(sel))
