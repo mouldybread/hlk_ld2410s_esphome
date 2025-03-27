@@ -4,7 +4,7 @@ HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 SPDX-License-Identifier: GPL-3.0-only
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 07:11:46 UTC
+Creation Date/Time: 2025-03-27 07:14:26 UTC
 """
 
 import esphome.config_validation as cv
@@ -41,7 +41,7 @@ hlk_ld2410s_ns = cg.esphome_ns.namespace('hlk_ld2410s')
 HLKLD2410SComponent = hlk_ld2410s_ns.class_('HLKLD2410SComponent', cg.Component, uart.UARTDevice)
 EnableConfigButton = hlk_ld2410s_ns.class_('EnableConfigButton', button.Button)
 DisableConfigButton = hlk_ld2410s_ns.class_('DisableConfigButton', button.Button)
-ResponseSpeedSelect = hlk_ld2410s_ns.class_('ResponseSpeedSelect', select.Select)
+ResponseSpeedSelect = hlk_ld2410s_ns.class_('ResponseSpeedSelect', select.Select, cg.Component)
 
 # Configuration schema for the component
 CONFIG_SCHEMA = cv.Schema({
@@ -65,10 +65,11 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(DisableConfigButton),
     cv.Optional(CONF_THROTTLE): cv.positive_time_period_milliseconds,
     cv.Optional(CONF_RESPONSE_SPEED): cv.int_range(min=0, max=9),
-    cv.Optional(CONF_RESPONSE_SPEED_SELECT): select.SELECT_SCHEMA.extend({
-        cv.GenerateID(): cv.declare_id(ResponseSpeedSelect),
-        cv.Optional(CONF_INITIAL_VALUE): cv.string,
-    }).extend(cv.COMPONENT_SCHEMA),
+    cv.Optional(CONF_RESPONSE_SPEED_SELECT): select.select_schema(
+        ResponseSpeedSelect,
+        options=RESPONSE_SPEED_OPTIONS,
+        icon="mdi:speedometer",
+    ),
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
@@ -103,15 +104,5 @@ async def to_code(config):
 
     if CONF_RESPONSE_SPEED_SELECT in config:
         conf = config[CONF_RESPONSE_SPEED_SELECT]
-        sel = await select.new_select(conf)
-        await cg.register_component(sel, conf)
-        
-        # Add all options
-        for opt in RESPONSE_SPEED_OPTIONS:
-            cg.add(sel.add_option(opt))
-            
-        # Set initial value if specified
-        if CONF_INITIAL_VALUE in conf:
-            cg.add(sel.set_initial_option(conf[CONF_INITIAL_VALUE]))
-        
+        sel = await select.new_select(conf, options=RESPONSE_SPEED_OPTIONS)
         cg.add(var.set_response_speed_select(sel))
