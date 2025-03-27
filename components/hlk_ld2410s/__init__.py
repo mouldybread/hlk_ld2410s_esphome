@@ -2,7 +2,7 @@
 HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 13:35:21 UTC
+Creation Date/Time: 2025-03-27 13:38:38 UTC
 """
 
 import esphome.codegen as cg
@@ -58,12 +58,29 @@ CONF_DISABLE_CONFIG = "disable_config"
 # Constants
 ICON_RADAR = "mdi:radar"
 DEFAULT_THROTTLE_MS = 50
-DEFAULT_RESPONSE_SPEED = 5
+DEFAULT_RESPONSE_SPEED = "normal"
 DEFAULT_UNMANNED_DELAY = 0
 DEFAULT_REPORT_FREQ = 0.5
 DEFAULT_FARTHEST_GATE = 12
 DEFAULT_NEAREST_GATE = 0
 MAX_GATES = 16
+
+# Output mode constants
+CONF_OUTPUT_MODE_STANDARD = "standard"
+CONF_OUTPUT_MODE_SIMPLE = "simple"
+
+# Response speed mapping
+CONF_RESPONSE_SPEED_MAP = {
+    "fastest": 0,
+    "very_fast": 1,
+    "fast": 2,
+    "medium_fast": 3,
+    "normal": 5,
+    "medium_slow": 6,
+    "slow": 7,
+    "very_slow": 8,
+    "slowest": 9,
+}
 
 # Custom validation helpers
 def validate_gate_number(value):
@@ -80,6 +97,28 @@ def validate_thresholds(value):
             raise cv.Invalid(f"Cannot have more than {MAX_GATES} threshold values")
         return cv.ensure_list(cv.int_range(min=0, max=255))(value)
     return cv.ensure_list(cv.int_range(min=0, max=255))([value])
+
+def validate_output_mode(value):
+    """Validate output mode setting."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        value = value.lower()
+        if value == CONF_OUTPUT_MODE_STANDARD:
+            return True
+        if value == CONF_OUTPUT_MODE_SIMPLE:
+            return False
+    raise cv.Invalid(f"Expected either boolean or one of: {CONF_OUTPUT_MODE_STANDARD}, {CONF_OUTPUT_MODE_SIMPLE}")
+
+def validate_response_speed(value):
+    """Validate response speed setting."""
+    if isinstance(value, int):
+        return cv.int_range(min=0, max=9)(value)
+    if isinstance(value, str):
+        value = value.lower()
+        if value in CONF_RESPONSE_SPEED_MAP:
+            return CONF_RESPONSE_SPEED_MAP[value]
+    raise cv.Invalid(f"Expected either integer (0-9) or one of: {', '.join(CONF_RESPONSE_SPEED_MAP.keys())}")
 
 def validate_gate_order(config):
     """Validate nearest gate is not greater than farthest gate."""
@@ -117,8 +156,8 @@ CONFIG_SCHEMA = cv.All(
                 }
             ),
             cv.Optional(CONF_THROTTLE, default=f"{DEFAULT_THROTTLE_MS}ms"): cv.positive_time_period_milliseconds,
-            cv.Optional(CONF_OUTPUT_MODE, default=True): cv.boolean,
-            cv.Optional(CONF_RESPONSE_SPEED, default=DEFAULT_RESPONSE_SPEED): cv.int_range(min=0, max=9),
+            cv.Optional(CONF_OUTPUT_MODE, default=True): validate_output_mode,
+            cv.Optional(CONF_RESPONSE_SPEED, default=DEFAULT_RESPONSE_SPEED): validate_response_speed,
             cv.Optional(CONF_UNMANNED_DELAY, default=DEFAULT_UNMANNED_DELAY): cv.uint16_t,
             cv.Optional(CONF_STATUS_REPORT_FREQ, default=DEFAULT_REPORT_FREQ): cv.float_range(min=0.1, max=10.0),
             cv.Optional(CONF_DISTANCE_REPORT_FREQ, default=DEFAULT_REPORT_FREQ): cv.float_range(min=0.1, max=10.0),
@@ -135,10 +174,12 @@ CONFIG_SCHEMA = cv.All(
             ),
             cv.Optional(CONF_ENABLE_CONFIG): cv.Schema({
                 cv.GenerateID(): cv.declare_id(EnableConfigButton),
+                cv.Optional("name"): cv.string,
                 cv.Optional("icon", default=ICON_RADAR): cv.icon,
             }).extend(cv.COMPONENT_SCHEMA),
             cv.Optional(CONF_DISABLE_CONFIG): cv.Schema({
                 cv.GenerateID(): cv.declare_id(DisableConfigButton),
+                cv.Optional("name"): cv.string,
                 cv.Optional("icon", default=ICON_RADAR): cv.icon,
             }).extend(cv.COMPONENT_SCHEMA),
         }
