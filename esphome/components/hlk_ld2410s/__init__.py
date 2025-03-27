@@ -1,11 +1,8 @@
-from esphome import automation
-from esphome.const import CONF_ID
 import esphome.config_validation as cv
-from esphome.core import CORE
-from esphome.components import sensor
-from esphome.components.hlk_ld2410s import hlk_ld2410s
+from esphome.const import CONF_ID
+from esphome import cg, automation
 
-HLK_LD2410SComponent = hlk_ld2410s.HLK_LD2410S
+HLK_LD2410SComponent = cg.global_ns.class_("HLK_LD2410S", cg.Component, cg.UARTDevice)
 
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(HLK_LD2410SComponent),
