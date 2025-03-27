@@ -34,10 +34,14 @@ hlk_ld2410s_ns = cg.esphome_ns.namespace("hlk_ld2410s")
 HLKLD2410SComponent = hlk_ld2410s_ns.class_(
     "HLKLD2410SComponent", cg.Component, uart.UARTDevice
 )
-EnableConfigButton = hlk_ld2410s_ns.class_("EnableConfigButton", button.Button)
-DisableConfigButton = hlk_ld2410s_ns.class_("DisableConfigButton", button.Button)
+EnableConfigButton = hlk_ld2410s_ns.class_(
+    "EnableConfigButton", button.Button, cg.Component
+)
+DisableConfigButton = hlk_ld2410s_ns.class_(
+    "DisableConfigButton", button.Button, cg.Component
+)
 
-# Custom configuration keys
+# Configuration keys
 CONF_DISTANCE = "distance"
 CONF_PRESENCE = "presence"
 CONF_CONFIG_MODE = "config_mode"
@@ -80,6 +84,18 @@ AUTO_THRESHOLD_SCHEMA = cv.Schema({
     cv.Required(CONF_SCAN_TIME): cv.int_range(min=0, max=120),
 })
 
+ENABLE_BUTTON_SCHEMA = cv.Schema({
+    cv.GenerateID(): cv.declare_id(EnableConfigButton),
+    cv.Optional(CONF_NAME): cv.string,
+    cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
+}).extend(cv.COMPONENT_SCHEMA)
+
+DISABLE_BUTTON_SCHEMA = cv.Schema({
+    cv.GenerateID(): cv.declare_id(DisableConfigButton),
+    cv.Optional(CONF_NAME): cv.string,
+    cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
+}).extend(cv.COMPONENT_SCHEMA)
+
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
@@ -105,16 +121,8 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_CONFIG_MODE): binary_sensor.binary_sensor_schema(
                 icon=ICON_RADAR,
             ),
-            cv.Optional(CONF_ENABLE_CONFIGURATION): cv.Schema({
-                cv.GenerateID(): cv.declare_id(EnableConfigButton),
-                cv.Optional(CONF_NAME): cv.string,
-                cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
-            }).extend(cv.COMPONENT_SCHEMA),
-            cv.Optional(CONF_DISABLE_CONFIGURATION): cv.Schema({
-                cv.GenerateID(): cv.declare_id(DisableConfigButton),
-                cv.Optional(CONF_NAME): cv.string,
-                cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
-            }).extend(cv.COMPONENT_SCHEMA),
+            cv.Optional(CONF_ENABLE_CONFIGURATION): ENABLE_BUTTON_SCHEMA,
+            cv.Optional(CONF_DISABLE_CONFIGURATION): DISABLE_BUTTON_SCHEMA,
             cv.Optional(CONF_UNMANNED_DELAY, default=0): cv.int_range(
                 min=MIN_UNMANNED_DELAY, max=MAX_UNMANNED_DELAY
             ),
@@ -169,14 +177,16 @@ async def to_code(config):
 
     if CONF_ENABLE_CONFIGURATION in config:
         conf = config[CONF_ENABLE_CONFIGURATION]
-        btn = cg.new_Pvariable(conf[CONF_ID])
+        btn = cg.new_Pvariable(conf[CONF_ID], conf.get(CONF_NAME))
         await cg.register_component(btn, conf)
+        await button.register_button(btn, conf)
         cg.add(var.set_enable_config_button(btn))
 
     if CONF_DISABLE_CONFIGURATION in config:
         conf = config[CONF_DISABLE_CONFIGURATION]
-        btn = cg.new_Pvariable(conf[CONF_ID])
+        btn = cg.new_Pvariable(conf[CONF_ID], conf.get(CONF_NAME))
         await cg.register_component(btn, conf)
+        await button.register_button(btn, conf)
         cg.add(var.set_disable_config_button(btn))
 
     if CONF_UNMANNED_DELAY in config:
