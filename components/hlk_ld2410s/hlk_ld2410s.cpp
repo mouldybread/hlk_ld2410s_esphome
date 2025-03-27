@@ -2,7 +2,7 @@
  * HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
  * 
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 13:23:47 UTC
+ * Creation Date/Time: 2025-03-27 13:28:04 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -86,7 +86,8 @@
                  
                  // Wait until we have all the data
                  if (available() < data_length + 4) {  // data + end frame
-                     ESP_LOGV(TAG, "Waiting for more data");
+                     ESP_LOGV(TAG, "Waiting for more data (available: %d, needed: %d)", 
+                             available(), data_length + 4);
                      return;  // Come back when we have more data
                  }
  
@@ -107,6 +108,9 @@
                  }
  
                  // We have a complete valid frame, process it
+                 ESP_LOGV(TAG, "Processing frame type 0x%02X with length %u", frame_type, data_length);
+                 dump_data_("Frame data", data.data(), data_length);
+                 
                  if (this->output_mode_standard_) {
                      process_standard_frame_(frame_type, data_length, data.data());
                  } else {
@@ -146,6 +150,7 @@
  
      if (presence) {
          this->last_presence_detected_ = millis();
+         ESP_LOGV(TAG, "Presence detected at distance: %u cm", distance);
      }
  }
  
@@ -169,6 +174,7 @@
  
      if (presence) {
          this->last_presence_detected_ = millis();
+         ESP_LOGV(TAG, "Presence detected at distance: %u cm, energy: %u", distance, energy);
      }
  
      // Process gate energy data if available
@@ -263,6 +269,11 @@
  
      write_array(CONFIG_FRAME_END, sizeof(CONFIG_FRAME_END));
      
+     ESP_LOGV(TAG, "Sent command 0x%04X with %u bytes of data", cmd, data.size());
+     if (!data.empty()) {
+         dump_data_("Command data", data.data(), data.size());
+     }
+     
      flush();
      delay(COMMAND_DELAY_MS);
  
@@ -306,6 +317,7 @@
                                      dump_data_("Received ACK", &buffer[i], 8);
                                      return false;
                                  }
+                                 ESP_LOGV(TAG, "Received valid ACK for command 0x%04X", received_cmd);
                                  return true;
                              }
                          }
