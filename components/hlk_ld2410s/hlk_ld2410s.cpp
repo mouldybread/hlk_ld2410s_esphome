@@ -1,7 +1,7 @@
 /*
  * HLK-LD2410S Component for ESPHome
  * Created by: mouldybread
- * Creation Date/Time: 2025-03-27 12:33:22 UTC
+ * Creation Date/Time: 2025-03-27 12:38:38 UTC
  */
 
  #include "hlk_ld2410s.h"
