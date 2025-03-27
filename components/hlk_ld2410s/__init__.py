@@ -2,7 +2,7 @@
 HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 13:33:44 UTC
+Creation Date/Time: 2025-03-27 13:35:21 UTC
 """
 
 import esphome.codegen as cg
@@ -75,10 +75,11 @@ def validate_gate_number(value):
 
 def validate_thresholds(value):
     """Validate threshold list."""
-    values = cv.ensure_list(value)
-    if len(values) > MAX_GATES:
-        raise cv.Invalid(f"Cannot have more than {MAX_GATES} threshold values")
-    return [cv.uint8_t(x) for x in values]
+    if isinstance(value, list):
+        if len(value) > MAX_GATES:
+            raise cv.Invalid(f"Cannot have more than {MAX_GATES} threshold values")
+        return cv.ensure_list(cv.int_range(min=0, max=255))(value)
+    return cv.ensure_list(cv.int_range(min=0, max=255))([value])
 
 def validate_gate_order(config):
     """Validate nearest gate is not greater than farthest gate."""
@@ -90,35 +91,22 @@ def validate_gate_order(config):
             )
     return config
 
-# Sensor schemas
-DISTANCE_SENSOR_SCHEMA = sensor.sensor_schema(
-    unit_of_measurement=UNIT_METER,
-    icon=ICON_RULER,
-    accuracy_decimals=2,
-    device_class=DEVICE_CLASS_DISTANCE,
-    state_class=STATE_CLASS_MEASUREMENT,
-)
-
-GATE_ENERGY_SCHEMA = sensor.sensor_schema(
-    unit_of_measurement=UNIT_DECIBEL,
-    icon=ICON_RADIATOR,
-    accuracy_decimals=0,
-    device_class=DEVICE_CLASS_ENERGY,
-    state_class=STATE_CLASS_MEASUREMENT,
-)
-
-PRESENCE_SENSOR_SCHEMA = binary_sensor.binary_sensor_schema(
-    device_class=DEVICE_CLASS_MOTION,
-    icon=ICON_MOTION_SENSOR,
-)
-
 # Main configuration schema
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(HLKLD2410SComponent),
-            cv.Optional(CONF_DISTANCE): DISTANCE_SENSOR_SCHEMA,
-            cv.Optional(CONF_PRESENCE): PRESENCE_SENSOR_SCHEMA,
+            cv.Optional(CONF_DISTANCE): sensor.sensor_schema(
+                unit_of_measurement=UNIT_METER,
+                icon=ICON_RULER,
+                accuracy_decimals=2,
+                device_class=DEVICE_CLASS_DISTANCE,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_PRESENCE): binary_sensor.binary_sensor_schema(
+                device_class=DEVICE_CLASS_MOTION,
+                icon=ICON_MOTION_SENSOR,
+            ),
             cv.Optional(CONF_CONFIG_MODE): binary_sensor.binary_sensor_schema(
                 icon=ICON_RADAR,
             ),
@@ -140,9 +128,9 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_HOLD_THRESHOLDS): validate_thresholds,
             cv.Optional(CONF_AUTO_THRESHOLD): cv.Schema(
                 {
-                    cv.Required(CONF_TRIGGER_FACTOR): cv.uint8_t,
-                    cv.Required(CONF_HOLD_FACTOR): cv.uint8_t,
-                    cv.Required(CONF_SCAN_TIME): cv.uint8_t,
+                    cv.Required(CONF_TRIGGER_FACTOR): cv.int_range(min=0, max=255),
+                    cv.Required(CONF_HOLD_FACTOR): cv.int_range(min=0, max=255),
+                    cv.Required(CONF_SCAN_TIME): cv.int_range(min=0, max=255),
                 }
             ),
             cv.Optional(CONF_ENABLE_CONFIG): cv.Schema({
