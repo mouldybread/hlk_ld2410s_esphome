@@ -1,159 +1,112 @@
-/*
- * SPDX-License-Identifier: GPL-3.0-only
- *
- * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 11:32:15 UTC
- */
+#pragma once
 
- #pragma once
+#include "esphome/core/component.h"
+#include "esphome/components/uart/uart.h"
+#include "esphome/components/sensor/sensor.h"
+#include "esphome/components/binary_sensor/binary_sensor.h"
+#include "esphome/components/button/button.h"
+#include "esphome/core/hal.h"
 
- #include "esphome.h"
- #include "esphome/core/component.h"
- #include "esphome/components/uart/uart.h"
- #include "esphome/components/sensor/sensor.h"
- #include "esphome/components/binary_sensor/binary_sensor.h"
- #include "esphome/components/button/button.h"
- #include "esphome/components/select/select.h"
- 
- namespace esphome {
- namespace hlk_ld2410s {
- 
- static const char *const TAG = "hlk_ld2410s";
- 
- // Forward declaration of main component class
- class HLKLD2410SComponent;
- 
- // Button class definitions
- class EnableConfigButton : public button::Button {
-  public:
-   explicit EnableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
-   
-  protected:
-   void press_action() override;
-   HLKLD2410SComponent *parent_;
- };
- 
- class DisableConfigButton : public button::Button {
-  public:
-   explicit DisableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
-   
-  protected:
-   void press_action() override;
-   HLKLD2410SComponent *parent_;
- };
- 
- // Protocol Constants
- static const uint8_t MINIMAL_FRAME_HEADER = 0x6E;
- static const uint8_t MINIMAL_FRAME_END = 0x62;
- static const uint8_t CONFIG_FRAME_HEADER[4] = {0xFD, 0xFC, 0xFB, 0xFA};
- static const uint8_t CONFIG_FRAME_END[4] = {0x04, 0x03, 0x02, 0x01};
- static const uint8_t STANDARD_FRAME_HEADER[4] = {0xF4, 0xF3, 0xF2, 0xF1};
- static const uint8_t STANDARD_FRAME_END[4] = {0xF8, 0xF7, 0xF6, 0xF5};
- 
- // Command Words
- enum class CommandWord : uint16_t {
-   READ_FIRMWARE_VERSION = 0x0000,
-   ENABLE_CONFIG = 0x00FF,
-   END_CONFIG = 0x00FE,
-   WRITE_SERIAL_NUMBER = 0x0010,
-   READ_SERIAL_NUMBER = 0x0011,
-   AUTO_UPDATE_THRESHOLD = 0x0009,
-   WRITE_TRIGGER_THRESHOLD = 0x0072,
-   READ_TRIGGER_THRESHOLD = 0x0073,
-   WRITE_HOLD_THRESHOLD = 0x0076,
-   READ_HOLD_THRESHOLD = 0x0077,
-   WRITE_GENERAL_PARAMS = 0x0070,
-   READ_GENERAL_PARAMS = 0x0071,
-   SWITCH_OUTPUT_MODE = 0x007A
- };
- 
- // Parameter Words for General Parameters
- enum class GeneralParamWord : uint16_t {
-   DETECT_FARTHEST_GATE = 0x0005,
-   DETECT_NEAREST_GATE = 0x000A,
-   UNMANNED_DELAY = 0x0006,
-   STATUS_REPORT_FREQ = 0x0002,
-   DISTANCE_REPORT_FREQ = 0x000C,
-   RESPONSE_SPEED = 0x000B
- };
- 
- // Frame sizes
- static const size_t MINIMAL_FRAME_LENGTH = 5;  // header(1) + state(1) + distance(2) + end(1)
- static const size_t STANDARD_FRAME_MIN_LENGTH = 72;  // header(4) + len(2) + type(1) + state(1) + distance(2) + reserved(2) + energy(64) + end(4)
- static const size_t CONFIG_FRAME_MIN_LENGTH = 10;  // header(4) + len(2) + cmd(2) + end(4)
- 
- class HLKLD2410SComponent : public Component, public uart::UARTDevice {
-  public:
-   explicit HLKLD2410SComponent(uart::UARTComponent *parent) : UARTDevice(parent) {}
-   
-   void setup() override;
-   void loop() override;
-   void dump_config() override;
- 
-   // Sensor configuration methods
-   void set_distance_sensor(sensor::Sensor *sensor) { distance_sensor_ = sensor; }
-   void set_presence_sensor(binary_sensor::BinarySensor *sensor) { presence_sensor_ = sensor; }
-   void set_config_mode_sensor(binary_sensor::BinarySensor *sensor) { config_mode_sensor_ = sensor; }
-   void set_throttle(uint32_t throttle_ms) { throttle_ms_ = throttle_ms; }
-   void set_enable_config_button(button::Button *button) { enable_config_button_ = button; }
-   void set_disable_config_button(button::Button *button) { disable_config_button_ = button; }
-   void set_response_speed_select(select::Select *select) { response_speed_select_ = select; }
-   
-   // Configuration commands - made public for button access
-   void enable_configuration();
-   void disable_configuration();
-   void set_response_speed(uint8_t speed);
-   bool read_firmware_version();
-   bool switch_output_mode(bool standard_mode);
-   bool write_general_parameters(uint16_t param_word, uint32_t value);
-   bool read_general_parameters();
-   bool write_trigger_threshold(const std::vector<uint32_t> &thresholds);
-   bool read_trigger_threshold();
-   bool write_hold_threshold(const std::vector<uint32_t> &thresholds);
-   bool read_hold_threshold();
-   bool auto_update_threshold(uint8_t trigger_factor, uint8_t hold_factor, uint8_t scan_time);
-   bool write_serial_number(const std::string &serial);
-   bool read_serial_number(std::string &serial);
- 
-  protected:
-   // Sensors and controls
-   sensor::Sensor *distance_sensor_{nullptr};
-   binary_sensor::BinarySensor *presence_sensor_{nullptr};
-   binary_sensor::BinarySensor *config_mode_sensor_{nullptr};
-   button::Button *enable_config_button_{nullptr};
-   button::Button *disable_config_button_{nullptr};
-   select::Select *response_speed_select_{nullptr};
-   
-   // State variables
-   uint32_t throttle_ms_{0};
-   uint32_t last_update_{0};
-   bool in_config_mode_{false};
-   bool standard_output_mode_{false};
- 
-   // Device information
-   struct Version {
-     uint16_t major{0};
-     uint16_t minor{0};
-     uint16_t patch{0};
-   } firmware_version_;
- 
-   // Threshold storage
-   std::vector<uint32_t> trigger_thresholds_;
-   std::vector<uint32_t> hold_thresholds_;
-   
-   // Protocol handling methods
-   bool write_command_(CommandWord cmd, const uint8_t *data = nullptr, size_t len = 0);
-   bool read_ack_(CommandWord expected_cmd);
-   bool verify_frame_header_(const uint8_t *header, size_t len);
-   bool verify_frame_end_(const uint8_t *end, size_t len);
-   
-   // Data processing methods
-   void process_minimal_frame_(uint8_t state, uint16_t distance);
-   void process_standard_frame_(uint8_t state, uint16_t distance, const uint8_t *energy_values);
-   void process_threshold_progress_(uint16_t progress);
-   void process_minimal_data_();
-   void process_standard_data_();
- };
- 
- }  // namespace hlk_ld2410s
- }  // namespace esphome
+namespace esphome {
+namespace hlk_ld2410s {
+
+static const uint8_t MAX_GATES = 16;
+static const uint32_t ACK_TIMEOUT_MS = 1000;
+static const uint8_t CONFIG_FRAME_MIN_LENGTH = 10;
+
+class HLKLD2410SComponent;
+
+class EnableConfigButton : public button::Button, public Component {
+ public:
+    explicit EnableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
+    void press() override;
+ protected:
+    HLKLD2410SComponent *parent_;
+};
+
+class DisableConfigButton : public button::Button, public Component {
+ public:
+    explicit DisableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
+    void press() override;
+ protected:
+    HLKLD2410SComponent *parent_;
+};
+
+enum class CommandWord : uint16_t {
+    ENABLE_CONFIGURATION = 0xFF01,
+    DISABLE_CONFIGURATION = 0xFF02,
+    READ_FIRMWARE_VERSION = 0xFFE1,
+    SET_DISTANCE_GATES = 0xFFE2,
+    SET_TRIGGER_THRESHOLD = 0xFFE3,
+    READ_TRIGGER_THRESHOLD = 0xFFE4,
+    SET_HOLD_THRESHOLD = 0xFFE5,
+    READ_HOLD_THRESHOLD = 0xFFE6,
+    SET_AUTO_THRESHOLD = 0xFFE7,
+    SET_RESPONSE_SPEED = 0xFFE8,
+};
+
+class HLKLD2410SComponent : public Component, public uart::UARTDevice {
+ public:
+    explicit HLKLD2410SComponent(uart::UARTComponent *parent) : UARTDevice(parent) {}
+
+    void setup() override;
+    void loop() override;
+    void dump_config() override;
+    float get_setup_priority() const override { return setup_priority::DATA; }
+
+    void set_distance_sensor(sensor::Sensor *distance) { distance_sensor_ = distance; }
+    void set_presence_sensor(binary_sensor::BinarySensor *presence) { presence_sensor_ = presence; }
+    void set_config_mode_sensor(binary_sensor::BinarySensor *config_mode) { config_mode_sensor_ = config_mode; }
+    void set_enable_config_button(EnableConfigButton *enable_config) { enable_config_button_ = enable_config; }
+    void set_disable_config_button(DisableConfigButton *disable_config) { disable_config_button_ = disable_config; }
+
+    void switch_output_mode(bool standard_mode) { output_mode_standard_ = standard_mode; }
+    void set_response_speed(uint8_t speed) { response_speed_ = speed; }
+    void set_throttle(uint32_t throttle) { throttle_ = throttle; }
+    void set_unmanned_delay(uint8_t delay) { unmanned_delay_ = delay; }
+    void set_status_report_frequency(float freq) { status_report_frequency_ = freq; }
+    void set_distance_report_frequency(float freq) { distance_report_frequency_ = freq; }
+    void set_farthest_gate(uint8_t gate) { farthest_gate_ = gate; }
+    void set_nearest_gate(uint8_t gate) { nearest_gate_ = gate; }
+    void set_trigger_thresholds(const std::vector<uint8_t> &thresholds);
+    void set_hold_thresholds(const std::vector<uint8_t> &thresholds);
+    void set_auto_threshold(uint8_t trigger_factor, uint8_t hold_factor, uint8_t scan_time);
+    void set_gate_energy_sensor(uint8_t gate, sensor::Sensor *energy);
+
+    bool enable_configuration();
+    bool disable_configuration();
+    bool read_firmware_version();
+    bool write_trigger_threshold(const std::vector<uint8_t> &thresholds);
+    bool read_trigger_threshold();
+    bool write_hold_threshold(const std::vector<uint8_t> &thresholds);
+    bool read_hold_threshold();
+
+ protected:
+    sensor::Sensor *distance_sensor_{nullptr};
+    binary_sensor::BinarySensor *presence_sensor_{nullptr};
+    binary_sensor::BinarySensor *config_mode_sensor_{nullptr};
+    EnableConfigButton *enable_config_button_{nullptr};
+    DisableConfigButton *disable_config_button_{nullptr};
+    std::map<uint8_t, sensor::Sensor *> gate_energy_sensors_{};
+
+    bool output_mode_standard_{true};
+    uint8_t response_speed_{5};
+    uint32_t throttle_{50};
+    uint8_t unmanned_delay_{0};
+    float status_report_frequency_{0.5f};
+    float distance_report_frequency_{0.5f};
+    uint8_t farthest_gate_{12};
+    uint8_t nearest_gate_{0};
+    std::vector<uint8_t> trigger_thresholds_;
+    std::vector<uint8_t> hold_thresholds_;
+
+    uint32_t last_presence_detected_{0};
+    bool config_mode_{false};
+    void process_standard_frame_(uint8_t frame_type, uint16_t data_length, const uint8_t *data);
+    void process_simple_frame_(uint8_t frame_type, uint16_t data_length, const uint8_t *data);
+    bool read_ack_(CommandWord expected_command);
+    bool write_command_(CommandWord command, const std::vector<uint8_t> &data = {});
+};
+
+}  // namespace hlk_ld2410s
+}  // namespace esphome
