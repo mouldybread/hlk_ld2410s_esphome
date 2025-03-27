@@ -1,11 +1,12 @@
 #pragma once
 
 #include "esphome/core/component.h"
-#include "esphome/components/uart/uart_device.h"
+#include "esphome/components/uart/uart.h"  // Changed from uart_device.h
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/button/button.h"
 #include <vector>
+#include <map>  // Added for std::map
 
 namespace esphome {
 namespace hlk_ld2410s {
