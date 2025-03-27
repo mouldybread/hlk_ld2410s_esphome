@@ -2,7 +2,7 @@
 HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 13:32:02 UTC
+Creation Date/Time: 2025-03-27 13:33:44 UTC
 """
 
 import esphome.codegen as cg
@@ -145,8 +145,14 @@ CONFIG_SCHEMA = cv.All(
                     cv.Required(CONF_SCAN_TIME): cv.uint8_t,
                 }
             ),
-            cv.Optional(CONF_ENABLE_CONFIG): button.button_schema(icon=ICON_RADAR),
-            cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(icon=ICON_RADAR),
+            cv.Optional(CONF_ENABLE_CONFIG): cv.Schema({
+                cv.GenerateID(): cv.declare_id(EnableConfigButton),
+                cv.Optional("icon", default=ICON_RADAR): cv.icon,
+            }).extend(cv.COMPONENT_SCHEMA),
+            cv.Optional(CONF_DISABLE_CONFIG): cv.Schema({
+                cv.GenerateID(): cv.declare_id(DisableConfigButton),
+                cv.Optional("icon", default=ICON_RADAR): cv.icon,
+            }).extend(cv.COMPONENT_SCHEMA),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -219,12 +225,12 @@ async def to_code(config):
 
     if CONF_ENABLE_CONFIG in config:
         conf = config[CONF_ENABLE_CONFIG]
-        sens = cg.new_Pvariable(conf[CONF_ID], var)
-        await button.register_button(sens, conf)
-        cg.add(var.set_enable_config_button(sens))
+        button_var = cg.new_Pvariable(conf[CONF_ID], var)
+        await cg.register_component(button_var, conf)
+        cg.add(var.set_enable_config_button(button_var))
 
     if CONF_DISABLE_CONFIG in config:
         conf = config[CONF_DISABLE_CONFIG]
-        sens = cg.new_Pvariable(conf[CONF_ID], var)
-        await button.register_button(sens, conf)
-        cg.add(var.set_disable_config_button(sens))
+        button_var = cg.new_Pvariable(conf[CONF_ID], var)
+        await cg.register_component(button_var, conf)
+        cg.add(var.set_disable_config_button(button_var))
