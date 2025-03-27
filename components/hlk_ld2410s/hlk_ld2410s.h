@@ -49,7 +49,7 @@ class EnableConfigButton : public button::Button {
   explicit EnableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
 
  protected:
-  void press() override {
+  void press_action() override {  // Changed from press() to press_action()
     parent_->enable_configuration();
   }
 
@@ -61,7 +61,7 @@ class DisableConfigButton : public button::Button {
   explicit DisableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
 
  protected:
-  void press() override {
+  void press_action() override {  // Changed from press() to press_action()
     parent_->disable_configuration();
   }
 
