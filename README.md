@@ -8,7 +8,11 @@ To use this component in your ESPHome configuration, add the following to your `
 
 ```yaml
 external_components:
-  - source: github://mouldybread/hlk_ld2410s_esphome
+  - source:
+      type: git
+      url: https://github.com/mouldybread/hlk_ld2410s_esphome
+      ref: main
+      components: [hlk_ld2410s]
 
 esphome:
   name: hlk_ld2410s
