@@ -1,9 +1,7 @@
-from esphome.components.sensor import Sensor
-from esphome.const import CONF_ID
-import esphome.config_validation as cv
-from esphome import automation
-
 from .hlk_ld2410s import HLK_LD2410S
+import esphome.config_validation as cv
+from esphome.const import CONF_ID
+from esphome import cg, automation
 
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(HLK_LD2410S),
