@@ -2,7 +2,7 @@
 HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 12:14:13 UTC
+Creation Date/Time: 2025-03-27 12:15:49 UTC
 """
 
 import esphome.codegen as cg
@@ -28,6 +28,8 @@ from esphome.const import (
     STATE_CLASS_MEASUREMENT,
     UNIT_METER,
 )
+from esphome.core import CORE
+from esphome.cpp_generator import MockObjClass
 
 CODEOWNERS = ["@mouldybread"]
 DEPENDENCIES = ["uart"]
@@ -88,13 +90,19 @@ AUTO_THRESHOLD_SCHEMA = cv.Schema({
     cv.Required(CONF_SCAN_TIME): cv.int_range(min=0, max=120),
 })
 
-ENABLE_BUTTON_SCHEMA = cv.Schema({
+def _validate_button(value):
+    value = button.BUTTON_SCHEMA(value)
+    if CORE.using_esp_idf:
+        value["platform"] = "gpio"
+    return value
+
+ENABLE_BUTTON_SCHEMA = _validate_button({
     cv.GenerateID(): cv.declare_id(EnableConfigButton),
     cv.Optional(CONF_NAME): cv.string,
     cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
 }).extend(cv.COMPONENT_SCHEMA)
 
-DISABLE_BUTTON_SCHEMA = cv.Schema({
+DISABLE_BUTTON_SCHEMA = _validate_button({
     cv.GenerateID(): cv.declare_id(DisableConfigButton),
     cv.Optional(CONF_NAME): cv.string,
     cv.Optional(CONF_ICON, default=ICON_RADAR): cv.icon,
@@ -195,19 +203,17 @@ async def to_code(config):
         conf = config[CONF_ENABLE_CONFIGURATION]
         btn = cg.new_Pvariable(conf[CONF_ID])
         await cg.register_component(btn, conf)
-        await button.register_button(btn, conf)
+        cg.add(var.set_enable_config_button(btn))
         if CONF_NAME in conf:
             cg.add(btn.set_name(conf[CONF_NAME]))
-        cg.add(var.set_enable_config_button(btn))
 
     if CONF_DISABLE_CONFIGURATION in config:
         conf = config[CONF_DISABLE_CONFIGURATION]
         btn = cg.new_Pvariable(conf[CONF_ID])
         await cg.register_component(btn, conf)
-        await button.register_button(btn, conf)
+        cg.add(var.set_disable_config_button(btn))
         if CONF_NAME in conf:
             cg.add(btn.set_name(conf[CONF_NAME]))
-        cg.add(var.set_disable_config_button(btn))
 
     if CONF_UNMANNED_DELAY in config:
         cg.add(var.set_unmanned_delay(config[CONF_UNMANNED_DELAY]))
