@@ -4,7 +4,7 @@ HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 SPDX-License-Identifier: GPL-3.0-only
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 07:56:51 UTC
+Creation Date/Time: 2025-03-27 07:48:51 UTC
 """
 
 import esphome.config_validation as cv
@@ -32,6 +32,7 @@ CONF_DISABLE_CONFIG = "disable_configuration"
 CONF_CONFIG_MODE = "config_mode"
 CONF_RESPONSE_SPEED = "response_speed"
 CONF_RESPONSE_SPEED_SELECT = "response_speed_select"
+CONF_READ_FIRMWARE = "read_firmware"
 
 RESPONSE_SPEED_OPTIONS = [str(x) for x in range(10)]  # 0-9
 
@@ -41,6 +42,7 @@ HLKLD2410SComponent = hlk_ld2410s_ns.class_('HLKLD2410SComponent', cg.Component,
 EnableConfigButton = hlk_ld2410s_ns.class_('EnableConfigButton', button.Button)
 DisableConfigButton = hlk_ld2410s_ns.class_('DisableConfigButton', button.Button)
 ResponseSpeedSelect = hlk_ld2410s_ns.class_('ResponseSpeedSelect', select.Select, cg.Component)
+ReadFirmwareButton = hlk_ld2410s_ns.class_('ReadFirmwareButton', button.Button)
 
 # Configuration schema for the component
 CONFIG_SCHEMA = cv.Schema({
@@ -67,6 +69,7 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_RESPONSE_SPEED_SELECT): select.SELECT_SCHEMA.extend({
         cv.GenerateID(): cv.declare_id(ResponseSpeedSelect),
     }).extend(cv.COMPONENT_SCHEMA),
+    cv.Optional(CONF_READ_FIRMWARE): button.button_schema(ReadFirmwareButton),
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
@@ -74,34 +77,3 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID], await cg.get_variable(config[CONF_UART_ID]))
     await cg.register_component(var, config)
     
-    if CONF_DISTANCE in config:
-        sens = await sensor.new_sensor(config[CONF_DISTANCE])
-        cg.add(var.set_distance_sensor(sens))
-    
-    if CONF_PRESENCE in config:
-        sens = await binary_sensor.new_binary_sensor(config[CONF_PRESENCE])
-        cg.add(var.set_presence_sensor(sens))
-
-    if CONF_CONFIG_MODE in config:
-        sens = await binary_sensor.new_binary_sensor(config[CONF_CONFIG_MODE])
-        cg.add(var.set_config_mode_sensor(sens))
-
-    if CONF_ENABLE_CONFIG in config:
-        sens = cg.new_Pvariable(config[CONF_ENABLE_CONFIG][CONF_ID], var)
-        await button.register_button(sens, config[CONF_ENABLE_CONFIG])
-        cg.add(var.set_enable_config_button(sens))
-
-    if CONF_DISABLE_CONFIG in config:
-        sens = cg.new_Pvariable(config[CONF_DISABLE_CONFIG][CONF_ID], var)
-        await button.register_button(sens, config[CONF_DISABLE_CONFIG])
-        cg.add(var.set_disable_config_button(sens))
-
-    if CONF_THROTTLE in config:
-        cg.add(var.set_throttle(config[CONF_THROTTLE]))
-
-    if CONF_RESPONSE_SPEED_SELECT in config:
-        conf = config[CONF_RESPONSE_SPEED_SELECT]
-        sel = cg.new_Pvariable(conf[CONF_ID], var)
-        await cg.register_component(sel, conf)
-        await select.register_select(sel, conf, options=RESPONSE_SPEED_OPTIONS)
-        cg.add(var.set_response_speed_select(sel))
