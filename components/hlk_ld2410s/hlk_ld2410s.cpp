@@ -7,10 +7,12 @@ static const uint8_t FRAME_HEADER = 0x6E;
 static const uint8_t FRAME_END = 0x62;
 static const uint8_t FRAME_LENGTH = 5;  // Header(1) + State(1) + Distance(2) + End(1)
 
-HLKLD2410SComponent::HLKLD2410SComponent(uart::UARTComponent *parent) : uart::UARTDevice(parent) {}
+HLKLD2410SComponent::HLKLD2410SComponent(uart::UARTComponent *parent) : uart::UARTDevice(parent) {
+  ESP_LOGD(TAG, "Initializing HLK-LD2410S");
+}
 
 void HLKLD2410SComponent::setup() {
-  // Nothing special needed for setup
+  ESP_LOGCONFIG(TAG, "Setting up HLK-LD2410S");
   last_update_ = millis();
 }
 
@@ -29,6 +31,7 @@ void HLKLD2410SComponent::loop() {
   while (available() >= FRAME_LENGTH) {
     uint8_t header = read();
     if (header != FRAME_HEADER) {
+      ESP_LOGV(TAG, "Invalid header: 0x%02X", header);
       continue;  // Look for frame header
     }
 
@@ -38,6 +41,7 @@ void HLKLD2410SComponent::loop() {
     uint8_t end = read();
 
     if (end != FRAME_END) {
+      ESP_LOGV(TAG, "Invalid end byte: 0x%02X", end);
       continue;  // Invalid frame
     }
 
@@ -46,14 +50,19 @@ void HLKLD2410SComponent::loop() {
     bool presence = (state >= 2);
     
     // Parse distance (little endian format)
-    uint16_t distance = (distance_high << 8) | distance_low;
+    uint16_t distance = (distance_low) | (distance_high << 8);  // Swapped order for little-endian
 
-    // Update sensors
+    ESP_LOGD(TAG, "Frame received - State: %u, Distance: %u cm, Presence: %s", 
+             state, distance, presence ? "true" : "false");
+
+    // Update sensors with has_state flag
     if (this->presence_sensor_ != nullptr) {
       this->presence_sensor_->publish_state(presence ? 1 : 0);
+      ESP_LOGV(TAG, "Published presence: %d", presence ? 1 : 0);
     }
-    if (this->distance_sensor_ != nullptr) {
+    if (this->distance_sensor_ != nullptr && distance > 0) {  // Only publish non-zero distances
       this->distance_sensor_->publish_state(distance);
+      ESP_LOGV(TAG, "Published distance: %u cm", distance);
     }
 
     last_update_ = now;
