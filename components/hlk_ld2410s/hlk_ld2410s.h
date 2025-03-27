@@ -2,7 +2,7 @@
  * HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
  * 
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 13:42:30 UTC
+ * Creation Date/Time: 2025-03-27 14:09:51 UTC
  */
 
  #pragma once
@@ -106,6 +106,7 @@
      bool verify_frame_header_(const uint8_t *buf, size_t len);
      bool verify_frame_end_(const uint8_t *buf, size_t len);
      void dump_data_(const char* prefix, const uint8_t* data, size_t len);
+     void check_uart_settings_();  // Added this line
  
      // Sensors
      binary_sensor::BinarySensor *presence_sensor_{nullptr};
