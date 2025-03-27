@@ -4,7 +4,7 @@ HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 SPDX-License-Identifier: GPL-3.0-only
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 07:36:27 UTC
+Creation Date/Time: 2025-03-27 07:48:51 UTC
 """
 
 import esphome.config_validation as cv
@@ -77,38 +77,3 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID], await cg.get_variable(config[CONF_UART_ID]))
     await cg.register_component(var, config)
     
-    if CONF_DISTANCE in config:
-        sens = await sensor.new_sensor(config[CONF_DISTANCE])
-        cg.add(var.set_distance_sensor(sens))
-    
-    if CONF_PRESENCE in config:
-        sens = await binary_sensor.new_binary_sensor(config[CONF_PRESENCE])
-        cg.add(var.set_presence_sensor(sens))
-
-    if CONF_CONFIG_MODE in config:
-        sens = await binary_sensor.new_binary_sensor(config[CONF_CONFIG_MODE])
-        cg.add(var.set_config_mode_sensor(sens))
-
-    if CONF_ENABLE_CONFIG in config:
-        sens = cg.new_Pvariable(config[CONF_ENABLE_CONFIG][CONF_ID], var)
-        await button.register_button(sens, config[CONF_ENABLE_CONFIG])
-        cg.add(var.set_enable_config_button(sens))
-
-    if CONF_DISABLE_CONFIG in config:
-        sens = cg.new_Pvariable(config[CONF_DISABLE_CONFIG][CONF_ID], var)
-        await button.register_button(sens, config[CONF_DISABLE_CONFIG])
-        cg.add(var.set_disable_config_button(sens))
-
-    if CONF_THROTTLE in config:
-        cg.add(var.set_throttle(config[CONF_THROTTLE]))
-
-    if CONF_RESPONSE_SPEED_SELECT in config:
-        conf = config[CONF_RESPONSE_SPEED_SELECT]
-        sel = cg.new_Pvariable(conf[CONF_ID], var)
-        await cg.register_component(sel, conf)
-        await select.register_select(sel, conf, options=RESPONSE_SPEED_OPTIONS)
-        cg.add(var.set_response_speed_select(sel))
-
-    if CONF_READ_FIRMWARE in config:
-        sens = cg.new_Pvariable(config[CONF_READ_FIRMWARE][CONF_ID], var)
-        await button.register_button(sens, config[CONF_READ_FIRMWARE])
