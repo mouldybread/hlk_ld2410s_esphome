@@ -1,8 +1,8 @@
 /**
  * Implementation of HLK-LD2410S mmWave Radar Sensor component for ESPHome.
  * 
- * Author: github.com/mouldybread
- * Created: 2025-03-27 15:13:43 UTC
+ * Author: mouldybread
+ * Created: 2025-03-27 15:26:33 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -11,13 +11,25 @@
  namespace esphome {
  namespace hlk_ld2410s {
  
- static const char *const TAG = "hlk_ld2410s";
+ void EnableConfigButton::press() {
+     this->parent_->enable_configuration_();
+ }
+ 
+ void DisableConfigButton::press() {
+     this->parent_->disable_configuration_();
+ }
  
  void HLKLD2410SComponent::setup() {
      ESP_LOGCONFIG(TAG, "Setting up HLK-LD2410S...");
-     this->enable_configuration_();
+     this->reset_input_buffer_();
+     if (!this->enable_configuration_()) {
+         ESP_LOGE(TAG, "%s: Failed to enable configuration mode", ERROR_CONFIGURATION);
+         return;
+     }
      this->apply_cached_config_();
-     this->disable_configuration_();
+     if (!this->disable_configuration_()) {
+         ESP_LOGE(TAG, "%s: Failed to disable configuration mode", ERROR_CONFIGURATION);
+     }
  }
  
  void HLKLD2410SComponent::loop() {
@@ -34,7 +46,7 @@
  
  void HLKLD2410SComponent::dump_config() {
      ESP_LOGCONFIG(TAG, "HLK-LD2410S:");
-     LOG_UPDATE_INTERVAL(this);
+     ESP_LOGCONFIG(TAG, "  Update Interval: %ums", this->throttle_);
      LOG_SENSOR("  ", "Distance", this->distance_sensor_);
      LOG_BINARY_SENSOR("  ", "Presence", this->presence_sensor_);
      LOG_BINARY_SENSOR("  ", "Config Mode", this->config_mode_sensor_);
@@ -47,60 +59,45 @@
      ESP_LOGCONFIG(TAG, "  Nearest Gate: %d", this->nearest_gate_);
  }
  
- void HLKLD2410SComponent::apply_cached_config_() {
-     if (!this->set_output_mode_()) {
-         ESP_LOGE(TAG, "Failed to set output mode");
-         return;
+ void HLKLD2410SComponent::reset_input_buffer_() {
+     while (this->available()) {
+         this->read();
      }
+ }
  
-     if (!this->set_response_speed_()) {
-         ESP_LOGE(TAG, "Failed to set response speed");
-         return;
-     }
- 
-     if (!this->set_unmanned_delay_()) {
-         ESP_LOGE(TAG, "Failed to set unmanned delay");
-         return;
-     }
- 
-     if (!this->set_status_report_frequency_()) {
-         ESP_LOGE(TAG, "Failed to set status report frequency");
-         return;
-     }
- 
-     if (!this->set_distance_report_frequency_()) {
-         ESP_LOGE(TAG, "Failed to set distance report frequency");
-         return;
-     }
- 
-     if (!this->set_farthest_gate_()) {
-         ESP_LOGE(TAG, "Failed to set farthest gate");
-         return;
-     }
- 
-     if (!this->set_nearest_gate_()) {
-         ESP_LOGE(TAG, "Failed to set nearest gate");
-         return;
-     }
- 
-     if (!this->trigger_thresholds_.empty() && !this->hold_thresholds_.empty()) {
-         if (!this->set_trigger_thresholds_()) {
-             ESP_LOGE(TAG, "Failed to set trigger thresholds");
-             return;
+ bool HLKLD2410SComponent::read_byte_(uint8_t *data, uint32_t timeout) {
+     uint32_t start = millis();
+     while ((millis() - start) < timeout) {
+         if (this->available()) {
+             *data = this->read();
+             return true;
          }
- 
-         if (!this->set_hold_thresholds_()) {
-             ESP_LOGE(TAG, "Failed to set hold thresholds");
-             return;
-         }
+         yield();
      }
+     ESP_LOGW(TAG, "%s: Read timeout", ERROR_TIMEOUT);
+     return false;
+ }
  
-     if (this->trigger_factor_ > 0 && this->hold_factor_ > 0 && this->scan_time_ > 0) {
-         if (!this->set_auto_threshold_()) {
-             ESP_LOGE(TAG, "Failed to set auto threshold");
-             return;
+ bool HLKLD2410SComponent::read_array_(std::vector<uint8_t> &data, size_t count) {
+     data.clear();
+     data.reserve(count);
+     
+     for (size_t i = 0; i < count; i++) {
+         uint8_t byte;
+         if (!this->read_byte_(&byte)) {
+             return false;
          }
+         data.push_back(byte);
      }
+     return true;
+ }
+ 
+ bool HLKLD2410SComponent::write_array_(const std::vector<uint8_t> &data) {
+     if (data.empty()) {
+         return true;
+     }
+     this->write_array(data.data(), data.size());
+     return true;
  }
  
  void HLKLD2410SComponent::read_data_() {
@@ -109,70 +106,74 @@
  
      // Read until we find the header sequence
      while (this->available()) {
-         data = this->read();
+         if (!this->read_byte_(&data)) {
+             return;
+         }
          buffer.push_back(data);
  
          if (buffer.size() >= 4) {
-             if (buffer[buffer.size() - 4] == 0xF4 &&
-                 buffer[buffer.size() - 3] == 0xF3 &&
-                 buffer[buffer.size() - 2] == 0xF2 &&
-                 buffer[buffer.size() - 1] == 0xF1) {
+             if (buffer[buffer.size() - 4] == DATA_FRAME_HEADER[0] &&
+                 buffer[buffer.size() - 3] == DATA_FRAME_HEADER[1] &&
+                 buffer[buffer.size() - 2] == DATA_FRAME_HEADER[2] &&
+                 buffer[buffer.size() - 1] == DATA_FRAME_HEADER[3]) {
                  break;
              }
          }
      }
  
      // Read length bytes
-     if (!this->read_byte(&data)) {
+     if (!this->read_byte_(&data)) {
          return;
      }
      uint16_t length = data;
-     if (!this->read_byte(&data)) {
+     if (!this->read_byte_(&data)) {
          return;
      }
      length |= (data << 8);
  
+     if (length < DATA_FRAME_MIN_LENGTH) {
+         ESP_LOGW(TAG, "%s: Frame too short", ERROR_VALIDATION);
+         return;
+     }
+ 
      // Read command
-     if (!this->read_byte(&data)) {
+     if (!this->read_byte_(&data)) {
          return;
      }
      uint8_t command = data;
  
      // Read payload
      std::vector<uint8_t> payload;
-     for (uint16_t i = 0; i < length - 1; i++) {
-         if (!this->read_byte(&data)) {
-             return;
-         }
-         payload.push_back(data);
+     if (!this->read_array_(payload, length - 1)) {
+         return;
      }
  
      // Read checksum
-     if (!this->read_byte(&data)) {
+     if (!this->read_byte_(&data)) {
          return;
      }
      uint8_t checksum = data;
  
      // Verify checksum
-     std::vector<uint8_t> check_data = {
-         0xF4, 0xF3, 0xF2, 0xF1,
-         static_cast<uint8_t>(length & 0xFF),
-         static_cast<uint8_t>((length >> 8) & 0xFF),
-         command
-     };
+     std::vector<uint8_t> check_data;
+     check_data.reserve(4 + 2 + 1 + payload.size());
+     check_data.insert(check_data.end(), DATA_FRAME_HEADER, DATA_FRAME_HEADER + 4);
+     check_data.push_back(length & 0xFF);
+     check_data.push_back((length >> 8) & 0xFF);
+     check_data.push_back(command);
      check_data.insert(check_data.end(), payload.begin(), payload.end());
  
      if (checksum != this->calculate_checksum_(check_data)) {
-         ESP_LOGW(TAG, "Invalid checksum");
+         ESP_LOGW(TAG, "%s: Invalid checksum", ERROR_VALIDATION);
          return;
      }
  
      // Process command
      switch (command) {
-         case 0x01:
+         case CMD_ENGINEERING_DATA:
              this->handle_engineering_data_(payload);
              break;
-         case 0x02:
+         case CMD_SIMPLE_DATA:
              this->handle_simple_data_(payload);
              break;
          default:
@@ -182,14 +183,14 @@
  }
  
  void HLKLD2410SComponent::handle_engineering_data_(const std::vector<uint8_t> &data) {
-     if (data.size() < 34) {
-         ESP_LOGW(TAG, "Invalid engineering data length");
+     if (data.size() < DATA_FRAME_ENGINEERING_LENGTH) {
+         ESP_LOGW(TAG, "%s: Engineering data frame too short", ERROR_VALIDATION);
          return;
      }
  
      const uint8_t head = data[0];
      if (head != 0xAA) {
-         ESP_LOGW(TAG, "Invalid engineering data header");
+         ESP_LOGW(TAG, "%s: Invalid engineering data header", ERROR_VALIDATION);
          return;
      }
  
@@ -209,7 +210,7 @@
      }
  
      // Update gate energy sensors
-     for (uint8_t i = 0; i < 16; i++) {
+     for (uint8_t i = 0; i < MAX_GATES; i++) {
          if (this->gate_energy_sensors_[i] != nullptr) {
              const uint8_t energy = data[i + 6];
              this->gate_energy_sensors_[i]->publish_state(energy);
@@ -218,14 +219,14 @@
  }
  
  void HLKLD2410SComponent::handle_simple_data_(const std::vector<uint8_t> &data) {
-     if (data.size() < 6) {
-         ESP_LOGW(TAG, "Invalid simple data length");
+     if (data.size() < DATA_FRAME_SIMPLE_LENGTH) {
+         ESP_LOGW(TAG, "%s: Simple data frame too short", ERROR_VALIDATION);
          return;
      }
  
      const uint8_t head = data[0];
      if (head != 0xAA) {
-         ESP_LOGW(TAG, "Invalid simple data header");
+         ESP_LOGW(TAG, "%s: Invalid simple data header", ERROR_VALIDATION);
          return;
      }
  
@@ -243,177 +244,188 @@
  }
  
  bool HLKLD2410SComponent::enable_configuration_() {
-     std::vector<uint8_t> data = {
-         0xFD, 0xFC, 0xFB, 0xFA,  // Header
-         0x04, 0x00,              // Length
-         0x04,                    // Command (Enable Configuration)
-         0x00                     // Reserved
-     };
+     std::vector<uint8_t> data;
+     data.insert(data.end(), CONFIG_FRAME_HEADER, CONFIG_FRAME_HEADER + 4);
+     data.push_back(0x04);  // Length low byte
+     data.push_back(0x00);  // Length high byte
+     data.push_back(0x04);  // Command (Enable Configuration)
+     data.push_back(0x00);  // Reserved
  
-     data.push_back(calculate_checksum_(data));
-     this->write_array(data);
+     data.push_back(this->calculate_checksum_(data));
+     if (!this->write_array_(data)) {
+         ESP_LOGE(TAG, "%s: Failed to send enable configuration command", ERROR_COMMUNICATION);
+         return false;
+     }
  
      if (this->config_mode_sensor_ != nullptr) {
          this->config_mode_sensor_->publish_state(true);
      }
  
-     return true;
+     return this->wait_for_ack_();
  }
  
  bool HLKLD2410SComponent::disable_configuration_() {
-     std::vector<uint8_t> data = {
-         0xFD, 0xFC, 0xFB, 0xFA,  // Header
-         0x04, 0x00,              // Length
-         0x05,                    // Command (Disable Configuration)
-         0x00                     // Reserved
-     };
+     std::vector<uint8_t> data;
+     data.insert(data.end(), CONFIG_FRAME_HEADER, CONFIG_FRAME_HEADER + 4);
+     data.push_back(0x04);  // Length low byte
+     data.push_back(0x00);  // Length high byte
+     data.push_back(0x05);  // Command (Disable Configuration)
+     data.push_back(0x00);  // Reserved
  
-     data.push_back(calculate_checksum_(data));
-     this->write_array(data);
+     data.push_back(this->calculate_checksum_(data));
+     if (!this->write_array_(data)) {
+         ESP_LOGE(TAG, "%s: Failed to send disable configuration command", ERROR_COMMUNICATION);
+         return false;
+     }
  
      if (this->config_mode_sensor_ != nullptr) {
          this->config_mode_sensor_->publish_state(false);
      }
  
-     return true;
+     return this->wait_for_ack_();
  }
  
- bool HLKLD2410SComponent::set_output_mode_() {
-     std::vector<uint8_t> data = {
-         0xFD, 0xFC, 0xFB, 0xFA,  // Header
-         0x04, 0x00,              // Length
-         0x06,                    // Command (Set Output Mode)
-         static_cast<uint8_t>(this->output_mode_ ? 0x01 : 0x00)
-     };
+ void HLKLD2410SComponent::apply_cached_config_() {
+     bool success = true;
  
-     data.push_back(calculate_checksum_(data));
-     this->write_array(data);
-     return true;
+     if (!this->set_output_mode_()) {
+         ESP_LOGE(TAG, "%s: Failed to set output mode", ERROR_CONFIGURATION);
+         success = false;
+     }
+ 
+     if (!this->set_response_speed_()) {
+         ESP_LOGE(TAG, "%s: Failed to set response speed", ERROR_CONFIGURATION);
+         success = false;
+     }
+ 
+     if (!this->set_unmanned_delay_()) {
+         ESP_LOGE(TAG, "%s: Failed to set unmanned delay", ERROR_CONFIGURATION);
+         success = false;
+     }
+ 
+     if (!this->set_status_report_frequency_()) {
+         ESP_LOGE(TAG, "%s: Failed to set status report frequency", ERROR_CONFIGURATION);
+         success = false;
+     }
+ 
+     if (!this->set_distance_report_frequency_()) {
+         ESP_LOGE(TAG, "%s: Failed to set distance report frequency", ERROR_CONFIGURATION);
+         success = false;
+     }
+ 
+     if (!this->set_farthest_gate_()) {
+         ESP_LOGE(TAG, "%s: Failed to set farthest gate", ERROR_CONFIGURATION);
+         success = false;
+     }
+ 
+     if (!this->set_nearest_gate_()) {
+         ESP_LOGE(TAG, "%s: Failed to set nearest gate", ERROR_CONFIGURATION);
+         success = false;
+     }
+ 
+     if (!this->trigger_thresholds_.empty() && !this->hold_thresholds_.empty()) {
+         if (!this->set_trigger_thresholds_()) {
+             ESP_LOGE(TAG, "%s: Failed to set trigger thresholds", ERROR_CONFIGURATION);
+             success = false;
+         }
+ 
+         if (!this->set_hold_thresholds_()) {
+             ESP_LOGE(TAG, "%s: Failed to set hold thresholds", ERROR_CONFIGURATION);
+             success = false;
+         }
+     }
+ 
+     if (this->trigger_factor_ > 0 && this->hold_factor_ > 0 && this->scan_time_ > 0) {
+         if (!this->set_auto_threshold_()) {
+             ESP_LOGE(TAG, "%s: Failed to set auto threshold", ERROR_CONFIGURATION);
+             success = false;
+         }
+     }
+ 
+     if (!success) {
+         ESP_LOGE(TAG, "%s: One or more configuration commands failed", ERROR_CONFIGURATION);
+     }
  }
  
- bool HLKLD2410SComponent::set_response_speed_() {
-     std::vector<uint8_t> data = {
-         0xFD, 0xFC, 0xFB, 0xFA,  // Header
-         0x04, 0x00,              // Length
-         0x07,                    // Command (Set Response Speed)
-         static_cast<uint8_t>(this->response_speed_)
-     };
- 
-     data.push_back(calculate_checksum_(data));
-     this->write_array(data);
-     return true;
- }
- 
- bool HLKLD2410SComponent::set_unmanned_delay_() {
-     std::vector<uint8_t> data = {
-         0xFD, 0xFC, 0xFB, 0xFA,  // Header
-         0x04, 0x00,              // Length
-         0x08,                    // Command (Set Unmanned Delay)
-         static_cast<uint8_t>(this->unmanned_delay_)
-     };
- 
-     data.push_back(calculate_checksum_(data));
-     this->write_array(data);
-     return true;
- }
- 
- bool HLKLD2410SComponent::set_status_report_frequency_() {
-     std::vector<uint8_t> data = {
-         0xFD, 0xFC, 0xFB, 0xFA,  // Header
-         0x04, 0x00,              // Length
-         0x09,                    // Command (Set Status Report Frequency)
-         static_cast<uint8_t>(this->status_report_frequency_ * 10)
-     };
- 
-     data.push_back(calculate_checksum_(data));
-     this->write_array(data);
-     return true;
- }
- 
- bool HLKLD2410SComponent::set_distance_report_frequency_() {
-     std::vector<uint8_t> data = {
-         0xFD, 0xFC, 0xFB, 0xFA,  // Header
-         0x04, 0x00,              // Length
-         0x0A,                    // Command (Set Distance Report Frequency)
-         static_cast<uint8_t>(this->distance_report_frequency_ * 10)
-     };
- 
-     data.push_back(calculate_checksum_(data));
-     this->write_array(data);
-     return true;
- }
- 
- bool HLKLD2410SComponent::set_auto_threshold_() {
-     std::vector<uint8_t> data = {
-         0xFD, 0xFC, 0xFB, 0xFA,  // Header
-         0x07, 0x00,              // Length
-         0x0B,                    // Command (Set Auto Threshold)
-         this->trigger_factor_,
-         this->hold_factor_,
-         this->scan_time_,
-         0                        // Reserved
-     };
- 
-     data.push_back(calculate_checksum_(data));
-     this->write_array(data);
-     return true;
- }
- 
- bool HLKLD2410SComponent::set_farthest_gate_() {
-     std::vector<uint8_t> data = {
-         0xFD, 0xFC, 0xFB, 0xFA,  // Header
-         0x04, 0x00,              // Length
-         0x0C,                    // Command (Set Farthest Gate)
-         static_cast<uint8_t>(this->farthest_gate_)
-     };
- 
-     data.push_back(calculate_checksum_(data));
-     this->write_array(data);
-     return true;
- }
- 
- bool HLKLD2410SComponent::set_nearest_gate_() {
-     std::vector<uint8_t> data = {
-         0xFD, 0xFC, 0xFB, 0xFA,  // Header
-         0x04, 0x00,              // Length
-         0x0D,                    // Command (Set Nearest Gate)
-         static_cast<uint8_t>(this->nearest_gate_)
-     };
- 
-     data.push_back(calculate_checksum_(data));
-     this->write_array(data);
-     return true;
- }
- 
- bool HLKLD2410SComponent::set_trigger_thresholds_() {
-     std::vector<uint8_t> data = {
-         0xFD, 0xFC, 0xFB, 0xFA,  // Header
-         0x14, 0x00,              // Length (20)
-         0x0E,                    // Command (Set Trigger Thresholds)
-     };
- 
-     // Add thresholds
-     data.insert(data.end(), this->trigger_thresholds_.begin(), this->trigger_thresholds_.end());
+ bool HLKLD2410SComponent::send_command_(CommandWord cmd, const std::vector<uint8_t> &payload) {
+     std::vector<uint8_t> data;
+     data.insert(data.end(), CONFIG_FRAME_HEADER, CONFIG_FRAME_HEADER + 4);
      
-     // Add checksum
-     data.push_back(calculate_checksum_(data));
-     this->write_array(data);
-     return true;
+     uint16_t length = payload.size() + 1;  // +1 for command byte
+     data.push_back(length & 0xFF);
+     data.push_back((length >> 8) & 0xFF);
+     
+     data.push_back(static_cast<uint8_t>(cmd));
+     data.insert(data.end(), payload.begin(), payload.end());
+     
+     data.push_back(this->calculate_checksum_(data));
+     
+     if (!this->write_array_(data)) {
+         ESP_LOGE(TAG, "%s: Failed to send command 0x%04X", ERROR_COMMUNICATION, static_cast<uint16_t>(cmd));
+         return false;
+     }
+     
+     return this->wait_for_ack_();
  }
  
- bool HLKLD2410SComponent::set_hold_thresholds_() {
-     std::vector<uint8_t> data = {
-         0xFD, 0xFC, 0xFB, 0xFA,  // Header
-         0x14, 0x00,              // Length (20)
-         0x0F,                    // Command (Set Hold Thresholds)
-     };
+ bool HLKLD2410SComponent::wait_for_ack_(uint32_t timeout) {
+     uint32_t start = millis();
+     while ((millis() - start) < timeout) {
+         if (this->available()) {
+             if (this->read_ack_()) {
+                 return true;
+             }
+         }
+         yield();
+     }
+     ESP_LOGW(TAG, "%s: No ACK received", ERROR_TIMEOUT);
+     return false;
+ }
  
-     // Add thresholds
-     data.insert(data.end(), this->hold_thresholds_.begin(), this->hold_thresholds_.end());
-     
-     // Add checksum
-     data.push_back(calculate_checksum_(data));
-     this->write_array(data);
+ bool HLKLD2410SComponent::read_ack_() {
+     std::vector<uint8_t> ack_data;
+     if (!this->read_array_(ack_data, CONFIG_FRAME_MIN_LENGTH)) {
+         return false;
+     }
+ 
+     return this->validate_response_(ack_data);
+ }
+ 
+ bool HLKLD2410SComponent::validate_response_(const std::vector<uint8_t> &data) {
+     if (data.size() < CONFIG_FRAME_MIN_LENGTH) {
+         ESP_LOGW(TAG, "%s: Response too short", ERROR_VALIDATION);
+         return false;
+     }
+ 
+     // Verify header
+     for (size_t i = 0; i < 4; i++) {
+         if (data[i] != CONFIG_FRAME_HEADER[i]) {
+             ESP_LOGW(TAG, "%s: Invalid response header", ERROR_VALIDATION);
+             return false;
+         }
+     }
+ 
+     // Verify length
+     uint16_t length = data[4] | (data[5] << 8);
+     if (length + 7 != data.size()) {  // 7 = header(4) + length(2) + checksum(1)
+         ESP_LOGW(TAG, "%s: Invalid response length", ERROR_VALIDATION);
+         return false;
+     }
+ 
+     // Verify checksum
+     std::vector<uint8_t> check_data(data.begin(), data.end() - 1);
+     if (data.back() != this->calculate_checksum_(check_data)) {
+         ESP_LOGW(TAG, "%s: Invalid response checksum", ERROR_VALIDATION);
+         return false;
+     }
+ 
+     // Check response status
+     ResponseStatus status = static_cast<ResponseStatus>(data[6]);
+     if (status != ResponseStatus::SUCCESS) {
+         ESP_LOGW(TAG, "%s: Command failed with status 0x%02X", ERROR_VALIDATION, static_cast<uint8_t>(status));
+         return false;
+     }
+ 
      return true;
  }
  
@@ -423,6 +435,51 @@
          sum += byte;
      }
      return sum;
+ }
+ 
+ bool HLKLD2410SComponent::set_output_mode_() {
+     return this->send_command_(CommandWord::SWITCH_OUTPUT_MODE, {static_cast<uint8_t>(this->output_mode_ ? 0x01 : 0x00)});
+ }
+ 
+ bool HLKLD2410SComponent::set_response_speed_() {
+     return this->send_command_(CommandWord::WRITE_PARAMETERS, {this->response_speed_});
+ }
+ 
+ bool HLKLD2410SComponent::set_unmanned_delay_() {
+     return this->send_command_(CommandWord::WRITE_PARAMETERS, {this->unmanned_delay_});
+ }
+ 
+ bool HLKLD2410SComponent::set_status_report_frequency_() {
+     return this->send_command_(CommandWord::WRITE_PARAMETERS, {static_cast<uint8_t>(this->status_report_frequency_ * 10)});
+ }
+ 
+ bool HLKLD2410SComponent::set_distance_report_frequency_() {
+     return this->send_command_(CommandWord::WRITE_PARAMETERS, {static_cast<uint8_t>(this->distance_report_frequency_ * 10)});
+ }
+ 
+ bool HLKLD2410SComponent::set_auto_threshold_() {
+     return this->send_command_(CommandWord::AUTO_THRESHOLD, {
+         this->trigger_factor_,
+         this->hold_factor_,
+         this->scan_time_,
+         0  // Reserved
+     });
+ }
+ 
+ bool HLKLD2410SComponent::set_farthest_gate_() {
+     return this->send_command_(CommandWord::WRITE_PARAMETERS, {this->farthest_gate_});
+ }
+ 
+ bool HLKLD2410SComponent::set_nearest_gate_() {
+     return this->send_command_(CommandWord::WRITE_PARAMETERS, {this->nearest_gate_});
+ }
+ 
+ bool HLKLD2410SComponent::set_trigger_thresholds_() {
+     return this->send_command_(CommandWord::WRITE_TRIGGER_THRESHOLD, this->trigger_thresholds_);
+ }
+ 
+ bool HLKLD2410SComponent::set_hold_thresholds_() {
+     return this->send_command_(CommandWord::WRITE_HOLD_THRESHOLD, this->hold_thresholds_);
  }
  
  }  // namespace hlk_ld2410s
