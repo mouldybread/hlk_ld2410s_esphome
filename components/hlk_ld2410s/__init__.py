@@ -1,162 +1,174 @@
-/**
- * HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
- * 
- * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 14:46:10 UTC
- */
+"""HLK-LD2410S mmWave Radar Sensor integration for ESPHome."""
 
-#pragma once
+import esphome.codegen as cg
+import esphome.config_validation as cv
+from esphome.components import uart, sensor, binary_sensor, button
+from esphome.const import (
+    CONF_ID,
+    CONF_THROTTLE,
+    CONF_DISTANCE,
+    CONF_NAME,
+    DEVICE_CLASS_DISTANCE,
+    DEVICE_CLASS_OCCUPANCY,
+    DEVICE_CLASS_RUNNING,
+    STATE_CLASS_MEASUREMENT,
+    UNIT_METER,
+    ICON_RADAR,
+)
 
-#include "esphome/core/component.h"
-#include "esphome/components/uart/uart.h"
-#include "esphome/components/binary_sensor/binary_sensor.h"
-#include "esphome/components/sensor/sensor.h"
-#include "esphome/components/button/button.h"
-#include <vector>
-#include <map>
+DEPENDENCIES = ['uart']
+AUTO_LOAD = ['sensor', 'binary_sensor', 'button']
 
-namespace esphome {
-namespace hlk_ld2410s {
+hlk_ld2410s_ns = cg.esphome_ns.namespace('hlk_ld2410s')
+HLKLD2410SComponent = hlk_ld2410s_ns.class_(
+    'HLKLD2410SComponent', cg.Component, uart.UARTDevice
+)
+EnableConfigButton = hlk_ld2410s_ns.class_('EnableConfigButton', button.Button)
+DisableConfigButton = hlk_ld2410s_ns.class_('DisableConfigButton', button.Button)
 
-static const char *const TAG = "hlk_ld2410s";
-static const uint8_t MAX_GATES = 16;
+# Configuration Constants
+CONF_UART_ID = 'uart_id'
+CONF_PRESENCE = 'presence'
+CONF_CONFIG_MODE = 'config_mode'
+CONF_ENABLE_CONFIGURATION = 'enable_configuration'
+CONF_DISABLE_CONFIGURATION = 'disable_configuration'
+CONF_OUTPUT_MODE = 'output_mode'
+CONF_RESPONSE_SPEED = 'response_speed'
+CONF_UNMANNED_DELAY = 'unmanned_delay'
+CONF_STATUS_REPORT_FREQUENCY = 'status_report_frequency'
+CONF_DISTANCE_REPORT_FREQUENCY = 'distance_report_frequency'
+CONF_FARTHEST_GATE = 'farthest_gate'
+CONF_NEAREST_GATE = 'nearest_gate'
+CONF_TRIGGER_THRESHOLDS = 'trigger_thresholds'
+CONF_HOLD_THRESHOLDS = 'hold_thresholds'
+CONF_AUTO_THRESHOLD = 'auto_threshold'
+CONF_TRIGGER_FACTOR = 'trigger_factor'
+CONF_HOLD_FACTOR = 'hold_factor'
+CONF_SCAN_TIME = 'scan_time'
+CONF_GATE_ENERGY = 'gate_{}_energy'
 
-// Configuration frame constants
-static const uint8_t CONFIG_FRAME_HEADER[] = {0xFD, 0xFC, 0xFB, 0xFA};
-static const uint8_t CONFIG_FRAME_END[] = {0x04, 0x03, 0x02, 0x01};
-static const uint16_t CONFIG_FRAME_MIN_LENGTH = 8;
-static const uint32_t ACK_TIMEOUT_MS = 1000;
-static const uint32_t COMMAND_DELAY_MS = 100;
+# Validation schemas
+AUTO_THRESHOLD_SCHEMA = cv.Schema({
+    cv.Required(CONF_TRIGGER_FACTOR): cv.int_range(min=1, max=5),
+    cv.Required(CONF_HOLD_FACTOR): cv.int_range(min=1, max=5),
+    cv.Required(CONF_SCAN_TIME): cv.int_range(min=10, max=250),
+})
 
-// Command words for configuration
-enum class CommandWord : uint16_t {
-    ENABLE_CONFIGURATION = 0xFF00,
-    DISABLE_CONFIGURATION = 0xFE00,
-    SWITCH_OUTPUT_MODE = 0x7A00,
-    READ_FIRMWARE_VERSION = 0x0000,
-    WRITE_SERIAL_NUMBER = 0x1000,
-    READ_SERIAL_NUMBER = 0x1100,
-    WRITE_PARAMETERS = 0x7000,
-    READ_PARAMETERS = 0x7100,
-    AUTO_THRESHOLD = 0x0900,
-    WRITE_TRIGGER_THRESHOLD = 0x7200,
-    READ_TRIGGER_THRESHOLD = 0x7300,
-    WRITE_HOLD_THRESHOLD = 0x7600,
-    READ_HOLD_THRESHOLD = 0x7700
-};
+CONFIG_SCHEMA = cv.Schema({
+    cv.GenerateID(): cv.declare_id(HLKLD2410SComponent),
+    cv.Required(CONF_UART_ID): cv.use_id(uart.UARTComponent),
+    cv.Optional(CONF_THROTTLE, default='50ms'): cv.positive_time_period_milliseconds,
+    cv.Optional(CONF_OUTPUT_MODE, default=True): cv.boolean,
+    cv.Optional(CONF_RESPONSE_SPEED, default=5): cv.one_of(5, 10),
+    cv.Optional(CONF_UNMANNED_DELAY, default=40): cv.int_range(min=10, max=120),
+    cv.Optional(CONF_STATUS_REPORT_FREQUENCY, default=0.5): cv.float_range(min=0.5, max=8.0),
+    cv.Optional(CONF_DISTANCE_REPORT_FREQUENCY, default=0.5): cv.float_range(min=0.5, max=8.0),
+    cv.Optional(CONF_FARTHEST_GATE, default=12): cv.int_range(min=1, max=16),
+    cv.Optional(CONF_NEAREST_GATE, default=0): cv.int_range(min=0, max=15),
+    cv.Optional(CONF_TRIGGER_THRESHOLDS): cv.All(
+        cv.ensure_list(cv.int_range(min=0, max=100)),
+        cv.Length(exact=16),
+    ),
+    cv.Optional(CONF_HOLD_THRESHOLDS): cv.All(
+        cv.ensure_list(cv.int_range(min=0, max=100)),
+        cv.Length(exact=16),
+    ),
+    cv.Optional(CONF_AUTO_THRESHOLD): AUTO_THRESHOLD_SCHEMA,
+    cv.Optional(CONF_DISTANCE): sensor.sensor_schema(
+        unit_of_measurement=UNIT_METER,
+        accuracy_decimals=2,
+        device_class=DEVICE_CLASS_DISTANCE,
+        state_class=STATE_CLASS_MEASUREMENT,
+    ),
+    cv.Optional(CONF_PRESENCE): binary_sensor.binary_sensor_schema(
+        device_class=DEVICE_CLASS_OCCUPANCY,
+    ),
+    cv.Optional(CONF_CONFIG_MODE): binary_sensor.binary_sensor_schema(
+        device_class=DEVICE_CLASS_RUNNING,
+    ),
+    cv.Optional(CONF_ENABLE_CONFIGURATION): button.button_schema(),
+    cv.Optional(CONF_DISABLE_CONFIGURATION): button.button_schema(),
+}).extend(cv.COMPONENT_SCHEMA).extend(uart.UART_DEVICE_SCHEMA)
 
-class HLKLD2410SComponent;  // Forward declaration
+# Add gate energy sensor schemas
+for i in range(16):
+    CONFIG_SCHEMA = CONFIG_SCHEMA.extend({
+        cv.Optional(CONF_GATE_ENERGY.format(i)): sensor.sensor_schema(
+            accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
+            icon=ICON_RADAR,
+        ),
+    })
 
-class EnableConfigButton : public button::Button, public Component {
- public:
-    explicit EnableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
-    void press_action() override;
-    void setup() override {}
-    void dump_config() override {}
- protected:
-    HLKLD2410SComponent *parent_;
-};
+async def to_code(config):
+    var = cg.new_Pvariable(config[CONF_ID])
+    await cg.register_component(var, config)
+    await uart.register_uart_device(var, config)
 
-class DisableConfigButton : public button::Button, public Component {
- public:
-    explicit DisableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
-    void press_action() override;
-    void setup() override {}
-    void dump_config() override {}
- protected:
-    HLKLD2410SComponent *parent_;
-};
+    if CONF_THROTTLE in config:
+        cg.add(var.set_throttle(config[CONF_THROTTLE]))
 
-class HLKLD2410SComponent : public Component, public uart::UARTDevice {
- public:
-    explicit HLKLD2410SComponent(uart::UARTComponent *parent) : uart::UARTDevice(parent) {}
+    if CONF_OUTPUT_MODE in config:
+        cg.add(var.set_output_mode(config[CONF_OUTPUT_MODE]))
 
-    void setup() override;
-    void loop() override;
-    void dump_config() override;
-    float get_setup_priority() const override { return setup_priority::DATA; }
+    if CONF_RESPONSE_SPEED in config:
+        cg.add(var.set_response_speed(config[CONF_RESPONSE_SPEED]))
 
-    void set_distance_sensor(sensor::Sensor *distance_sensor) { distance_sensor_ = distance_sensor; }
-    void set_presence_sensor(binary_sensor::BinarySensor *presence_sensor) { presence_sensor_ = presence_sensor; }
-    void set_config_mode_sensor(binary_sensor::BinarySensor *config_mode_sensor) { config_mode_sensor_ = config_mode_sensor; }
-    void set_gate_energy_sensor(uint8_t gate, sensor::Sensor *energy_sensor) { gate_energy_sensors_[gate] = energy_sensor; }
+    if CONF_UNMANNED_DELAY in config:
+        cg.add(var.set_unmanned_delay(config[CONF_UNMANNED_DELAY]))
 
-    // Configuration setters
-    void set_throttle(uint32_t throttle) { throttle_ = throttle; }
-    void set_output_mode(bool standard_mode) { output_mode_standard_ = standard_mode; }
-    void set_response_speed(uint8_t speed) { response_speed_ = (speed == 10) ? 10 : 5; }
-    void set_unmanned_delay(uint16_t delay) { unmanned_delay_ = std::min(std::max(delay, uint16_t(10)), uint16_t(120)); }
-    void set_status_report_frequency(float freq) { status_report_freq_ = std::min(std::max(freq, 0.5f), 8.0f); }
-    void set_distance_report_frequency(float freq) { distance_report_freq_ = std::min(std::max(freq, 0.5f), 8.0f); }
-    void set_farthest_gate(uint8_t gate) { farthest_gate_ = std::min(gate, uint8_t(16)); }
-    void set_nearest_gate(uint8_t gate) { nearest_gate_ = std::min(gate, uint8_t(16)); }
-    void set_trigger_thresholds(const std::vector<uint8_t> &thresholds) { trigger_thresholds_ = thresholds; }
-    void set_hold_thresholds(const std::vector<uint8_t> &thresholds) { hold_thresholds_ = thresholds; }
-    void set_auto_threshold(uint8_t trigger_factor, uint8_t hold_factor, uint8_t scan_time) {
-        auto_threshold_trigger_ = trigger_factor;
-        auto_threshold_hold_ = hold_factor;
-        auto_threshold_scan_ = scan_time;
-    }
+    if CONF_STATUS_REPORT_FREQUENCY in config:
+        cg.add(var.set_status_report_frequency(config[CONF_STATUS_REPORT_FREQUENCY]))
 
-    // Button setters
-    void set_enable_config_button(EnableConfigButton *button) { enable_config_button_ = button; }
-    void set_disable_config_button(DisableConfigButton *button) { disable_config_button_ = button; }
+    if CONF_DISTANCE_REPORT_FREQUENCY in config:
+        cg.add(var.set_distance_report_frequency(config[CONF_DISTANCE_REPORT_FREQUENCY]))
 
-    // Configuration mode control
-    bool enable_configuration();
-    bool disable_configuration();
+    if CONF_FARTHEST_GATE in config:
+        cg.add(var.set_farthest_gate(config[CONF_FARTHEST_GATE]))
 
- protected:
-    // Command methods
-    bool write_command_(CommandWord command, const std::vector<uint8_t> &data = {});
-    bool read_ack_(CommandWord expected_cmd);
-    bool write_parameters_();
-    bool read_parameters_();
-    bool write_trigger_thresholds_();
-    bool read_trigger_thresholds_();
-    bool write_hold_thresholds_();
-    bool read_hold_thresholds_();
-    bool set_auto_threshold_();
-    bool switch_output_mode_(bool standard_mode);
+    if CONF_NEAREST_GATE in config:
+        cg.add(var.set_nearest_gate(config[CONF_NEAREST_GATE]))
 
-    // Utility methods
-    void process_simple_frame_(uint8_t frame_type, uint16_t data_length, const uint8_t *data);
-    void process_standard_frame_(uint8_t frame_type, uint16_t data_length, const uint8_t *data);
-    bool verify_frame_header_(const uint8_t *buf, size_t len);
-    bool verify_frame_end_(const uint8_t *buf, size_t len);
-    void dump_data_(const char* prefix, const uint8_t* data, size_t len);
-    void check_uart_settings_();
+    if CONF_TRIGGER_THRESHOLDS in config:
+        cg.add(var.set_trigger_thresholds(config[CONF_TRIGGER_THRESHOLDS]))
 
-    // Sensors
-    binary_sensor::BinarySensor *presence_sensor_{nullptr};
-    sensor::Sensor *distance_sensor_{nullptr};
-    binary_sensor::BinarySensor *config_mode_sensor_{nullptr};
-    std::map<uint8_t, sensor::Sensor *> gate_energy_sensors_{};
+    if CONF_HOLD_THRESHOLDS in config:
+        cg.add(var.set_hold_thresholds(config[CONF_HOLD_THRESHOLDS]))
 
-    // Configuration buttons
-    EnableConfigButton *enable_config_button_{nullptr};
-    DisableConfigButton *disable_config_button_{nullptr};
+    if CONF_AUTO_THRESHOLD in config:
+        at = config[CONF_AUTO_THRESHOLD]
+        cg.add(var.set_auto_threshold(
+            at[CONF_TRIGGER_FACTOR],
+            at[CONF_HOLD_FACTOR],
+            at[CONF_SCAN_TIME]
+        ))
 
-    // Configuration parameters
-    uint32_t throttle_{50};
-    uint32_t last_update_{0};
-    uint32_t last_presence_detected_{0};
-    bool output_mode_standard_{true};
-    bool config_mode_{false};
-    
-    // Advanced configuration
-    uint8_t response_speed_{5};  // 5 = Normal, 10 = Fast
-    uint16_t unmanned_delay_{40};  // 10-120 seconds
-    float status_report_freq_{0.5f};  // 0.5-8Hz in 0.5Hz steps
-    float distance_report_freq_{0.5f};  // 0.5-8Hz in 0.5Hz steps
-    uint8_t farthest_gate_{12};  // 1-16
-    uint8_t nearest_gate_{0};  // 0-16
-    uint8_t auto_threshold_trigger_{2};
-    uint8_t auto_threshold_hold_{1};
-    uint8_t auto_threshold_scan_{120};
-    std::vector<uint8_t> trigger_thresholds_{};
-    std::vector<uint8_t> hold_thresholds_{};
-};
+    if CONF_DISTANCE in config:
+        sens = await sensor.new_sensor(config[CONF_DISTANCE])
+        cg.add(var.set_distance_sensor(sens))
 
-}  // namespace hlk_ld2410s
-}  // namespace esphome
+    if CONF_PRESENCE in config:
+        sens = await binary_sensor.new_binary_sensor(config[CONF_PRESENCE])
+        cg.add(var.set_presence_sensor(sens))
+
+    if CONF_CONFIG_MODE in config:
+        sens = await binary_sensor.new_binary_sensor(config[CONF_CONFIG_MODE])
+        cg.add(var.set_config_mode_sensor(sens))
+
+    if CONF_ENABLE_CONFIGURATION in config:
+        conf = config[CONF_ENABLE_CONFIGURATION]
+        sens = cg.new_Pvariable(conf[CONF_ID], var)
+        await button.register_button(sens, conf)
+        cg.add(var.set_enable_config_button(sens))
+
+    if CONF_DISABLE_CONFIGURATION in config:
+        conf = config[CONF_DISABLE_CONFIGURATION]
+        sens = cg.new_Pvariable(conf[CONF_ID], var)
+        await button.register_button(sens, conf)
+        cg.add(var.set_disable_config_button(sens))
+
+    # Register gate energy sensors
+    for i in range(16):
+        if gate_conf := config.get(CONF_GATE_ENERGY.format(i)):
+            sens = await sensor.new_sensor(gate_conf)
+            cg.add(var.set_gate_energy_sensor(i, sens))
