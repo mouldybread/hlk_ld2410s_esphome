@@ -12,7 +12,7 @@ external_components:
       type: git
       url: https://github.com/mouldybread/hlk_ld2410s_esphome
       ref: main
-      components: [hlk_ld2410s]
+  components: [hlk_ld2410s]
 
 esphome:
   name: hlk_ld2410s
