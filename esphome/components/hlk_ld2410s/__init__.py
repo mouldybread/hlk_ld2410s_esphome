@@ -1,13 +1,13 @@
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
-from esphome.components import uart
 from esphome import automation
-from esphome import core as cg
+import esphome.codegen as cg
 
-HLK_LD2410SComponent = cg.global_ns.class_("HLK_LD2410S", cg.Component, uart.UARTDevice)
+hlk_ld2410s_ns = cg.esphome_ns.namespace('hlk_ld2410s')
+HLK_LD2410S = hlk_ld2410s_ns.class_('HLK_LD2410S', cg.Component, cg.UARTDevice)
 
 CONFIG_SCHEMA = cv.Schema({
-    cv.GenerateID(): cv.declare_id(HLK_LD2410SComponent),
+    cv.GenerateID(): cv.declare_id(HLK_LD2410S),
 }).extend(cv.COMPONENT_SCHEMA)
 
 def to_code(config):
