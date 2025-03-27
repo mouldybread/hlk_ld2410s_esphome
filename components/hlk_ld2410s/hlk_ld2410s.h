@@ -29,18 +29,22 @@ enum class CommandWord : uint16_t {
 
 class HLKLD2410SComponent;  // Forward declaration
 
-class EnableConfigButton : public Component, public button::Button {
+class EnableConfigButton : public button::Button, public Component {
  public:
     explicit EnableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
     void press_action() override;
+    void setup() override {}  // Add empty setup implementation
+    void dump_config() override {}  // Add empty dump_config implementation
  protected:
     HLKLD2410SComponent *parent_;
 };
 
-class DisableConfigButton : public Component, public button::Button {
+class DisableConfigButton : public button::Button, public Component {
  public:
     explicit DisableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
     void press_action() override;
+    void setup() override {}  // Add empty setup implementation
+    void dump_config() override {}  // Add empty dump_config implementation
  protected:
     HLKLD2410SComponent *parent_;
 };
@@ -49,10 +53,18 @@ class HLKLD2410SComponent : public Component, public uart::UARTDevice {
  public:
     explicit HLKLD2410SComponent(uart::UARTComponent *parent) : UARTDevice(parent) {}
 
+    // Required virtual functions from Component
     void setup() override;
     void loop() override;
+    void dump_config() override {
+        ESP_LOGCONFIG(TAG, "HLK-LD2410S:");
+        ESP_LOGCONFIG(TAG, "  Configuration Mode: %s", this->config_mode_ ? "ON" : "OFF");
+    }
+    float get_setup_priority() const override { return setup_priority::DATA; }
 
-    // Sensor setters
+    // Rest of your class implementation remains the same...
+    // ... sensor setters, configuration setters, etc.
+
     void set_distance_sensor(sensor::Sensor *distance_sensor) { distance_sensor_ = distance_sensor; }
     void set_presence_sensor(binary_sensor::BinarySensor *presence_sensor) { presence_sensor_ = presence_sensor; }
     void set_config_mode_sensor(binary_sensor::BinarySensor *config_mode_sensor) { config_mode_sensor_ = config_mode_sensor; }
@@ -121,5 +133,5 @@ class HLKLD2410SComponent : public Component, public uart::UARTDevice {
     std::vector<uint8_t> hold_thresholds_{};
 };
 
-} // namespace hlk_ld2410s
-} // namespace esphome
+}  // namespace hlk_ld2410s
+}  // namespace esphome
