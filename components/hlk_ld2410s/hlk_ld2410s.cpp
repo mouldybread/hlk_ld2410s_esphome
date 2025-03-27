@@ -3,7 +3,7 @@
  * 
  * Author: mouldybread
  * Created: 2025-03-27 15:44:50 UTC
- * Updated: 2025-03-27 16:22:42 UTC
+ * Updated: 2025-03-27 16:30:39 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -11,6 +11,8 @@
  
  namespace esphome {
  namespace hlk_ld2410s {
+ 
+ static const char* TAG = "hlk_ld2410s";
  
  void HLKLD2410SComponent::setup() {
      ESP_LOGCONFIG(TAG, "Setting up HLK-LD2410S...");
@@ -63,11 +65,12 @@
      while ((millis() - start) < timeout) {
          if (this->available()) {
              *data = this->read();
+             ESP_LOGV(TAG, "Read byte: 0x%02X", *data);
              return true;
          }
          yield();
      }
-     ESP_LOGW(TAG, "%s: Read timeout", ERROR_TIMEOUT);
+     ESP_LOGV(TAG, "Read timeout after %ums", timeout);
      return false;
  }
  
@@ -78,6 +81,7 @@
      for (size_t i = 0; i < count; i++) {
          uint8_t byte;
          if (!this->read_byte_(&byte)) {
+             ESP_LOGW(TAG, "Failed to read byte %d of %d", i, count);
              return false;
          }
          data.push_back(byte);
@@ -90,47 +94,69 @@
          return true;
      }
      this->write_array(data.data(), data.size());
+     
+     std::string debug_str = "Writing bytes:";
+     for (uint8_t byte : data) {
+         char hex[8];
+         snprintf(hex, sizeof(hex), " 0x%02X", byte);
+         debug_str += hex;
+     }
+     ESP_LOGV(TAG, "%s", debug_str.c_str());
+     
      return true;
  }
  
  void HLKLD2410SComponent::read_data_() {
      uint8_t data;
      static std::vector<uint8_t> buffer;
+     static uint32_t last_debug = 0;
+     const uint32_t now = millis();
      
-     // Read one byte at a time with timeout
-     if (!this->read_byte_(&data, 10)) {  // Reduced timeout to 10ms
+     if (!this->read_byte_(&data, 10)) {
          return;
      }
+ 
+     ESP_LOGV(TAG, "Received byte: 0x%02X", data);
+     
      buffer.push_back(data);
  
-     // Keep buffer at reasonable size
      if (buffer.size() > 128) {
+         ESP_LOGD(TAG, "Buffer overflow, clearing oldest byte");
          buffer.erase(buffer.begin());
      }
  
+     if (now - last_debug > 1000) {
+         std::string debug_str = "Buffer contents:";
+         for (uint8_t byte : buffer) {
+             char hex[8];
+             snprintf(hex, sizeof(hex), " 0x%02X", byte);
+             debug_str += hex;
+         }
+         ESP_LOGD(TAG, "%s", debug_str.c_str());
+         last_debug = now;
+     }
+ 
      if (this->output_mode_) {  // Engineering mode
-         // Check for standard data frame header
          if (buffer.size() >= 4) {
              for (size_t i = 0; i <= buffer.size() - 4; i++) {
                  if (buffer[i] == 0xF4 && buffer[i + 1] == 0xF3 &&
                      buffer[i + 2] == 0xF2 && buffer[i + 3] == 0xF1) {
                      
-                     // Found header - remove everything before it
+                     ESP_LOGD(TAG, "Found engineering frame header at position %d", i);
+                     
                      if (i > 0) {
                          buffer.erase(buffer.begin(), buffer.begin() + i);
                      }
  
-                     // Check if we have complete frame
                      if (buffer.size() >= 75) {
-                         // Verify frame end
                          if (buffer[71] == 0xF8 && buffer[72] == 0xF7 &&
                              buffer[73] == 0xF6 && buffer[74] == 0xF5) {
                              
-                             // Extract data
                              uint8_t target_state = buffer[7];
                              uint16_t distance = buffer[8] | (buffer[9] << 8);
                              
-                             // Process data
+                             ESP_LOGD(TAG, "Engineering frame - State: %d, Distance: %d", target_state, distance);
+                             
                              if (this->distance_sensor_ != nullptr) {
                                  this->distance_sensor_->publish_state(distance / 100.0f);
                              }
@@ -138,15 +164,15 @@
                                  this->presence_sensor_->publish_state(target_state > 0);
                              }
  
-                             // Process gate energy values if needed
                              for (uint8_t i = 0; i < MAX_GATES; i++) {
                                  if (this->gate_energy_sensors_[i] != nullptr) {
                                      this->gate_energy_sensors_[i]->publish_state(buffer[12 + i]);
                                  }
                              }
  
-                             // Remove processed frame
                              buffer.erase(buffer.begin(), buffer.begin() + 75);
+                         } else {
+                             ESP_LOGW(TAG, "Invalid frame end markers");
                          }
                      }
                      break;
@@ -154,29 +180,33 @@
              }
          }
      } else {  // Simple mode
-         // Check for minimal data frame
          if (buffer.size() >= 4) {
              for (size_t i = 0; i <= buffer.size() - 4; i++) {
-                 if (buffer[i] == 0x6E) {  // Frame head
-                     // Check if we have enough bytes for a complete frame
-                     if (i + 4 <= buffer.size() && buffer[i + 3] == 0x62) {  // Frame end
-                         // Extract data
+                 if (buffer[i] == 0x6E) {
+                     ESP_LOGD(TAG, "Found simple frame header at position %d", i);
+                     
+                     if (i + 4 <= buffer.size() && buffer[i + 3] == 0x62) {
+                         ESP_LOGD(TAG, "Simple frame bytes: 0x%02X 0x%02X 0x%02X 0x%02X", 
+                                 buffer[i], buffer[i + 1], buffer[i + 2], buffer[i + 3]);
+                         
                          uint8_t target_state = buffer[i + 1];
-                         uint16_t distance = (buffer[i + 2] << 8);  // MSB first
+                         uint16_t distance = buffer[i + 2];  // Single byte for distance in simple mode
                          
-                         ESP_LOGD(TAG, "Received frame - State: %d, Distance: %d", target_state, distance);
+                         ESP_LOGD(TAG, "Simple frame - State: %d, Distance: %d", target_state, distance);
                          
-                         // Process data
                          if (this->distance_sensor_ != nullptr) {
                              this->distance_sensor_->publish_state(distance / 100.0f);
+                             ESP_LOGD(TAG, "Published distance: %.2f m", distance / 100.0f);
                          }
                          if (this->presence_sensor_ != nullptr) {
                              this->presence_sensor_->publish_state(target_state > 0);
+                             ESP_LOGD(TAG, "Published presence: %s", target_state > 0 ? "true" : "false");
                          }
  
-                         // Remove processed frame
                          buffer.erase(buffer.begin(), buffer.begin() + i + 4);
                          break;
+                     } else {
+                         ESP_LOGV(TAG, "Incomplete frame or invalid end marker");
                      }
                  }
              }
@@ -200,7 +230,6 @@
      const uint16_t moving_distance = data[2] | (data[3] << 8);
      const uint16_t static_distance = data[4] | (data[5] << 8);
      
-     // Update sensors
      if (this->distance_sensor_ != nullptr) {
          float distance = (target_state & 0x01) ? moving_distance / 100.0f : 
                          (target_state & 0x02) ? static_distance / 100.0f : 0.0f;
@@ -211,7 +240,6 @@
          this->presence_sensor_->publish_state(target_state > 0);
      }
  
-     // Update gate energy sensors
      for (uint8_t i = 0; i < MAX_GATES; i++) {
          if (this->gate_energy_sensors_[i] != nullptr) {
              const uint8_t energy = data[i + 6];
@@ -235,7 +263,6 @@
      const uint8_t target_state = data[1];
      const uint16_t distance = data[2] | (data[3] << 8);
  
-     // Update sensors
      if (this->distance_sensor_ != nullptr) {
          this->distance_sensor_->publish_state(distance / 100.0f);
      }
@@ -327,7 +354,7 @@
      std::vector<uint8_t> data;
      data.insert(data.end(), CONFIG_FRAME_HEADER, CONFIG_FRAME_HEADER + 4);
      
-     uint16_t length = payload.size() + 1;  // +1 for command byte
+     uint16_t length = payload.size() + 1;
      data.push_back(length & 0xFF);
      data.push_back((length >> 8) & 0xFF);
      
@@ -373,7 +400,6 @@
          return false;
      }
  
-     // Verify header
      for (size_t i = 0; i < 4; i++) {
          if (data[i] != CONFIG_FRAME_HEADER[i]) {
              ESP_LOGW(TAG, "%s: Invalid response header", ERROR_VALIDATION);
@@ -381,21 +407,18 @@
          }
      }
  
-     // Verify length
      uint16_t length = data[4] | (data[5] << 8);
-     if (length + 7 != data.size()) {  // 7 = header(4) + length(2) + checksum(1)
+     if (length + 7 != data.size()) {
          ESP_LOGW(TAG, "%s: Invalid response length", ERROR_VALIDATION);
          return false;
      }
  
-     // Verify checksum
      std::vector<uint8_t> check_data(data.begin(), data.end() - 1);
      if (data.back() != this->calculate_checksum_(check_data)) {
          ESP_LOGW(TAG, "%s: Invalid response checksum", ERROR_VALIDATION);
          return false;
      }
  
-     // Check response status
      ResponseStatus status = static_cast<ResponseStatus>(data[6]);
      if (status != ResponseStatus::SUCCESS) {
          ESP_LOGW(TAG, "%s: Command failed with status 0x%02X", ERROR_VALIDATION, static_cast<uint8_t>(status));
@@ -438,7 +461,7 @@
          this->trigger_factor_,
          this->hold_factor_,
          this->scan_time_,
-         0  // Reserved
+         0
      });
  }
  
