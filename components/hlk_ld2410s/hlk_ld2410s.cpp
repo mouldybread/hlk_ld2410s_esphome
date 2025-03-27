@@ -2,7 +2,7 @@
  * HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
  * 
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 14:09:51 UTC
+ * Creation Date/Time: 2025-03-27 14:12:23 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -38,7 +38,7 @@
  }
  
  void HLKLD2410SComponent::check_uart_settings_() {
-     auto *uart = (UARTComponent *)this->parent_;
+     auto *uart = (esphome::uart::UARTComponent *)this->parent_;
      if (uart->get_baud_rate() != UART_BAUD_RATE) {
          ESP_LOGE(TAG, "Incorrect baud rate! HLK-LD2410S requires 115200 baud. Current: %u", uart->get_baud_rate());
      }
