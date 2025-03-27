@@ -6,30 +6,41 @@
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/button/button.h"
 #include "esphome/core/hal.h"
+#include <vector>
+#include <map>
 
 namespace esphome {
 namespace hlk_ld2410s {
 
+static const char *const TAG = "hlk_ld2410s";
 static const uint8_t MAX_GATES = 16;
 static const uint32_t ACK_TIMEOUT_MS = 1000;
 static const uint8_t CONFIG_FRAME_MIN_LENGTH = 10;
+static const uint8_t CONFIG_FRAME_HEADER[] = {0xFD, 0xFC, 0xFB, 0xFA};
+static const uint8_t CONFIG_FRAME_END[] = {0x04, 0x03, 0x02, 0x01};
 
 class HLKLD2410SComponent;
 
-class EnableConfigButton : public button::Button, public Component {
+class EnableConfigButton : public button::Button {
  public:
     explicit EnableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
-    void press() override;
+    void press_action() override;
  protected:
     HLKLD2410SComponent *parent_;
 };
 
-class DisableConfigButton : public button::Button, public Component {
+class DisableConfigButton : public button::Button {
  public:
     explicit DisableConfigButton(HLKLD2410SComponent *parent) : parent_(parent) {}
-    void press() override;
+    void press_action() override;
  protected:
     HLKLD2410SComponent *parent_;
+};
+
+struct FirmwareVersion {
+    uint16_t major{0};
+    uint16_t minor{0};
+    uint16_t revision{0};
 };
 
 enum class CommandWord : uint16_t {
@@ -68,8 +79,8 @@ class HLKLD2410SComponent : public Component, public uart::UARTDevice {
     void set_distance_report_frequency(float freq) { distance_report_frequency_ = freq; }
     void set_farthest_gate(uint8_t gate) { farthest_gate_ = gate; }
     void set_nearest_gate(uint8_t gate) { nearest_gate_ = gate; }
-    void set_trigger_thresholds(const std::vector<uint8_t> &thresholds);
-    void set_hold_thresholds(const std::vector<uint8_t> &thresholds);
+    void set_trigger_thresholds(const std::vector<uint8_t> &thresholds) { trigger_thresholds_ = thresholds; }
+    void set_hold_thresholds(const std::vector<uint8_t> &thresholds) { hold_thresholds_ = thresholds; }
     void set_auto_threshold(uint8_t trigger_factor, uint8_t hold_factor, uint8_t scan_time);
     void set_gate_energy_sensor(uint8_t gate, sensor::Sensor *energy);
 
@@ -92,6 +103,7 @@ class HLKLD2410SComponent : public Component, public uart::UARTDevice {
     bool output_mode_standard_{true};
     uint8_t response_speed_{5};
     uint32_t throttle_{50};
+    uint32_t last_update_{0};
     uint8_t unmanned_delay_{0};
     float status_report_frequency_{0.5f};
     float distance_report_frequency_{0.5f};
@@ -102,10 +114,14 @@ class HLKLD2410SComponent : public Component, public uart::UARTDevice {
 
     uint32_t last_presence_detected_{0};
     bool config_mode_{false};
+    FirmwareVersion firmware_version_{};
+
     void process_standard_frame_(uint8_t frame_type, uint16_t data_length, const uint8_t *data);
     void process_simple_frame_(uint8_t frame_type, uint16_t data_length, const uint8_t *data);
     bool read_ack_(CommandWord expected_command);
     bool write_command_(CommandWord command, const std::vector<uint8_t> &data = {});
+    bool verify_frame_header_(const uint8_t *header, size_t len);
+    bool verify_frame_end_(const uint8_t *end, size_t len);
 };
 
 }  // namespace hlk_ld2410s
