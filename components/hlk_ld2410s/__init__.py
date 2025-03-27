@@ -25,7 +25,7 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_PRESENCE): sensor.sensor_schema(
         accuracy_decimals=0,
     ),
-    cv.Optional(CONF_THROTTLE): cv.time_period_milliseconds,  # Add throttle configuration
+    cv.Optional(CONF_THROTTLE): cv.positive_time_period_milliseconds,  # Fixed validation method
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
