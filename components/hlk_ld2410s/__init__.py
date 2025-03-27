@@ -1,5 +1,6 @@
 import esphome.config_validation as cv
 import esphome.codegen as cg
+# Removed CONF_PRESENCE from this import since we define it ourselves
 from esphome.const import CONF_ID, CONF_DISTANCE, UNIT_CENTIMETER
 from esphome.components import sensor, uart
 
@@ -7,12 +8,11 @@ DEPENDENCIES = ['uart']
 AUTO_LOAD = ['sensor']
 
 # Define our own constants
-CONF_PRESENCE = "presence"  # Added our own CONF_PRESENCE constant
+CONF_PRESENCE = "presence"  # Our own constant
 
 hlk_ld2410s_ns = cg.esphome_ns.namespace('hlk_ld2410s')
 HLKLD2410SComponent = hlk_ld2410s_ns.class_('HLKLD2410SSensor', cg.Component, uart.UARTDevice)
 
-# Configuration schema for the component
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(HLKLD2410SComponent),
     cv.Optional(CONF_DISTANCE): sensor.sensor_schema(
