@@ -1,7 +1,7 @@
 """HLK-LD2410S mmWave Radar Sensor integration for ESPHome.
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 15:05:02 UTC
+Creation Date/Time: 2025-03-27 15:07:53 UTC
 """
 
 import esphome.codegen as cg
@@ -71,11 +71,11 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_NEAREST_GATE, default=0): cv.int_range(min=0, max=15),
     cv.Optional(CONF_TRIGGER_THRESHOLDS): cv.All(
         cv.ensure_list(cv.int_range(min=0, max=100)),
-        cv.Length(min=16, max=16),  # Changed from exact=16 to min=16, max=16
+        cv.Length(min=16, max=16),
     ),
     cv.Optional(CONF_HOLD_THRESHOLDS): cv.All(
         cv.ensure_list(cv.int_range(min=0, max=100)),
-        cv.Length(min=16, max=16),  # Changed from exact=16 to min=16, max=16
+        cv.Length(min=16, max=16),
     ),
     cv.Optional(CONF_AUTO_THRESHOLD): AUTO_THRESHOLD_SCHEMA,
     cv.Optional(CONF_DISTANCE): sensor.sensor_schema(
@@ -90,8 +90,8 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_CONFIG_MODE): binary_sensor.binary_sensor_schema(
         device_class=DEVICE_CLASS_RUNNING,
     ),
-    cv.Optional(CONF_ENABLE_CONFIGURATION): button.button_schema(),
-    cv.Optional(CONF_DISABLE_CONFIGURATION): button.button_schema(),
+    cv.Optional(CONF_ENABLE_CONFIGURATION): button.button_schema(class_=EnableConfigButton),
+    cv.Optional(CONF_DISABLE_CONFIGURATION): button.button_schema(class_=DisableConfigButton),
 }).extend(cv.COMPONENT_SCHEMA).extend(uart.UART_DEVICE_SCHEMA)
 
 # Add gate energy sensor schemas
