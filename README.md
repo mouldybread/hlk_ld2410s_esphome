@@ -1,6 +1,6 @@
 # hlk_ld2410s_esphome
 
-
+```
 external_components:
   - source: github://mouldybread/hlk_ld2410s_esphome
 
@@ -35,3 +35,4 @@ custom_component:
       auto hlk_ld2410s = new HLK_LD2410S(id(uart_bus));
       App.register_component(hlk_ld2410s);
       return {hlk_ld2410s};
+```
