@@ -4,7 +4,7 @@ HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 SPDX-License-Identifier: GPL-3.0-only
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 06:17:32 UTC
+Creation Date/Time: 2025-03-27 06:55:59 UTC
 """
 
 import esphome.config_validation as cv
@@ -18,10 +18,10 @@ from esphome.const import (
     ICON_RULER,
     ICON_MOTION_SENSOR,
 )
-from esphome.components import sensor, uart, binary_sensor, button
+from esphome.components import sensor, uart, binary_sensor, button, select
 
 DEPENDENCIES = ['uart']
-AUTO_LOAD = ['sensor', 'binary_sensor', 'button']
+AUTO_LOAD = ['sensor', 'binary_sensor', 'button', 'select']
 
 # Configuration options
 CONF_PRESENCE = "presence"
@@ -31,12 +31,14 @@ CONF_ENABLE_CONFIG = "enable_configuration"
 CONF_DISABLE_CONFIG = "disable_configuration"
 CONF_CONFIG_MODE = "config_mode"
 CONF_RESPONSE_SPEED = "response_speed"
+CONF_RESPONSE_SPEED_SELECT = "response_speed_select"
 
 # Generate namespaces
 hlk_ld2410s_ns = cg.esphome_ns.namespace('hlk_ld2410s')
 HLKLD2410SComponent = hlk_ld2410s_ns.class_('HLKLD2410SComponent', cg.Component, uart.UARTDevice)
 EnableConfigButton = hlk_ld2410s_ns.class_('EnableConfigButton', button.Button)
 DisableConfigButton = hlk_ld2410s_ns.class_('DisableConfigButton', button.Button)
+ResponseSpeedSelect = hlk_ld2410s_ns.class_('ResponseSpeedSelect', select.Select)
 
 # Configuration schema for the component
 CONFIG_SCHEMA = cv.Schema({
@@ -60,6 +62,10 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_DISABLE_CONFIG): button.button_schema(DisableConfigButton),
     cv.Optional(CONF_THROTTLE): cv.positive_time_period_milliseconds,
     cv.Optional(CONF_RESPONSE_SPEED): cv.int_range(min=0, max=9),
+    cv.Optional(CONF_RESPONSE_SPEED_SELECT): select.select_schema(
+        options=[str(x) for x in range(10)],  # 0-9
+        icon="mdi:speedometer",
+    ),
 }).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
@@ -92,5 +98,6 @@ async def to_code(config):
     if CONF_THROTTLE in config:
         cg.add(var.set_throttle(config[CONF_THROTTLE]))
 
-    if CONF_RESPONSE_SPEED in config:
-        cg.add(var.set_response_speed(config[CONF_RESPONSE_SPEED]))
+    if CONF_RESPONSE_SPEED_SELECT in config:
+        sel = await select.new_select(config[CONF_RESPONSE_SPEED_SELECT], options=[str(x) for x in range(10)])
+        cg.add(var.set_response_speed_select(sel))
