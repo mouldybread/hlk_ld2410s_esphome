@@ -3,6 +3,7 @@
  * 
  * Author: mouldybread
  * Created: 2025-03-27 15:44:50 UTC
+ * Updated: 2025-03-27 16:22:42 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -103,7 +104,7 @@
      buffer.push_back(data);
  
      // Keep buffer at reasonable size
-     if (buffer.size() > 128) {  // Increased to accommodate full engineering data frame
+     if (buffer.size() > 128) {
          buffer.erase(buffer.begin());
      }
  
@@ -120,13 +121,13 @@
                      }
  
                      // Check if we have complete frame
-                     if (buffer.size() >= 75) {  // Minimum frame size: 4(header) + 2(length) + 1(type) + 1(state) + 2(distance) + 2(reserved) + 64(energy) + 4(end)
+                     if (buffer.size() >= 75) {
                          // Verify frame end
                          if (buffer[71] == 0xF8 && buffer[72] == 0xF7 &&
                              buffer[73] == 0xF6 && buffer[74] == 0xF5) {
                              
                              // Extract data
-                             uint8_t target_state = buffer[7];  // After header(4) + length(2) + type(1)
+                             uint8_t target_state = buffer[7];
                              uint16_t distance = buffer[8] | (buffer[9] << 8);
                              
                              // Process data
@@ -140,7 +141,7 @@
                              // Process gate energy values if needed
                              for (uint8_t i = 0; i < MAX_GATES; i++) {
                                  if (this->gate_energy_sensors_[i] != nullptr) {
-                                     this->gate_energy_sensors_[i]->publish_state(buffer[12 + i]);  // After header(4) + length(2) + type(1) + state(1) + distance(2) + reserved(2)
+                                     this->gate_energy_sensors_[i]->publish_state(buffer[12 + i]);
                                  }
                              }
  
@@ -154,23 +155,29 @@
          }
      } else {  // Simple mode
          // Check for minimal data frame
-         if (buffer.size() >= 4) {  // Minimum frame size: 1(header) + 1(state) + 2(distance)
+         if (buffer.size() >= 4) {
              for (size_t i = 0; i <= buffer.size() - 4; i++) {
-                 if (buffer[i] == 0x6E && buffer[i + 3] == 0x62) {  // Check header and end
-                     uint8_t target_state = buffer[i + 1];
-                     uint16_t distance = buffer[i + 2] | (buffer[i + 3] << 8);
+                 if (buffer[i] == 0x6E) {  // Frame head
+                     // Check if we have enough bytes for a complete frame
+                     if (i + 4 <= buffer.size() && buffer[i + 3] == 0x62) {  // Frame end
+                         // Extract data
+                         uint8_t target_state = buffer[i + 1];
+                         uint16_t distance = (buffer[i + 2] << 8);  // MSB first
+                         
+                         ESP_LOGD(TAG, "Received frame - State: %d, Distance: %d", target_state, distance);
+                         
+                         // Process data
+                         if (this->distance_sensor_ != nullptr) {
+                             this->distance_sensor_->publish_state(distance / 100.0f);
+                         }
+                         if (this->presence_sensor_ != nullptr) {
+                             this->presence_sensor_->publish_state(target_state > 0);
+                         }
  
-                     // Process data
-                     if (this->distance_sensor_ != nullptr) {
-                         this->distance_sensor_->publish_state(distance / 100.0f);
+                         // Remove processed frame
+                         buffer.erase(buffer.begin(), buffer.begin() + i + 4);
+                         break;
                      }
-                     if (this->presence_sensor_ != nullptr) {
-                         this->presence_sensor_->publish_state(target_state > 0);
-                     }
- 
-                     // Remove processed frame
-                     buffer.erase(buffer.begin(), buffer.begin() + i + 4);
-                     break;
                  }
              }
          }
