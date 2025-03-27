@@ -3,7 +3,7 @@
  * 
  * Author: mouldybread
  * Created: 2025-03-27 15:44:50 UTC
- * Updated: 2025-03-27 16:30:39 UTC
+ * Updated: 2025-03-27 16:35:07 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -11,8 +11,6 @@
  
  namespace esphome {
  namespace hlk_ld2410s {
- 
- static const char* TAG = "hlk_ld2410s";
  
  void HLKLD2410SComponent::setup() {
      ESP_LOGCONFIG(TAG, "Setting up HLK-LD2410S...");
