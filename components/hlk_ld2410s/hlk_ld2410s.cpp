@@ -1,8 +1,8 @@
 /**
  * HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
- * 
+ * Version: 49
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 14:35:06 UTC
+ * Creation Date/Time: 2025-03-27 14:49:50 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -10,11 +10,6 @@
  
  namespace esphome {
  namespace hlk_ld2410s {
- 
- static const uint32_t UART_BAUD_RATE = 115200;
- static const uint32_t UART_READ_TIMEOUT_MS = 50;
- static const uint32_t COMMAND_DELAY_MS = 100;
- static const size_t RX_BUFFER_SIZE = 256;
  
  void EnableConfigButton::press_action() { this->parent_->enable_configuration(); }
  void DisableConfigButton::press_action() { this->parent_->disable_configuration(); }
@@ -31,6 +26,50 @@
          this->config_mode_sensor_->publish_state(false);
      }
  
+     // Apply configuration if any parameters are set
+     bool needs_config = false;
+     if (this->response_speed_ != 5 || this->unmanned_delay_ != 40 ||
+         this->status_report_freq_ != 0.5f || this->distance_report_freq_ != 0.5f ||
+         this->farthest_gate_ != 12 || this->nearest_gate_ != 0 ||
+         !this->trigger_thresholds_.empty() || !this->hold_thresholds_.empty()) {
+         needs_config = true;
+     }
+ 
+     if (needs_config) {
+         ESP_LOGI(TAG, "Applying custom configuration...");
+         if (enable_configuration()) {
+             delay(COMMAND_DELAY_MS);
+             if (write_parameters_()) {
+                 ESP_LOGI(TAG, "Parameters written successfully");
+             }
+             
+             if (!this->trigger_thresholds_.empty()) {
+                 delay(COMMAND_DELAY_MS);
+                 if (write_trigger_thresholds_()) {
+                     ESP_LOGI(TAG, "Trigger thresholds written successfully");
+                 }
+             }
+             
+             if (!this->hold_thresholds_.empty()) {
+                 delay(COMMAND_DELAY_MS);
+                 if (write_hold_thresholds_()) {
+                     ESP_LOGI(TAG, "Hold thresholds written successfully");
+                 }
+             }
+             
+             if (this->auto_threshold_trigger_ != 2 || this->auto_threshold_hold_ != 1 ||
+                 this->auto_threshold_scan_ != 120) {
+                 delay(COMMAND_DELAY_MS);
+                 if (set_auto_threshold_()) {
+                     ESP_LOGI(TAG, "Auto threshold parameters written successfully");
+                 }
+             }
+             
+             delay(COMMAND_DELAY_MS);
+             disable_configuration();
+         }
+     }
+ 
      // Switch to standard mode if configured
      if (this->output_mode_standard_) {
          if (!this->switch_output_mode_(true)) {
@@ -41,29 +80,49 @@
      ESP_LOGI(TAG, "Setup complete");
  }
  
- void HLKLD2410SComponent::check_uart_settings_() {
-     auto *uart = (esphome::uart::UARTComponent *)this->parent_;
-     if (uart->get_baud_rate() != UART_BAUD_RATE) {
-         ESP_LOGE(TAG, "Incorrect baud rate! HLK-LD2410S requires 115200 baud. Current: %u", uart->get_baud_rate());
-     }
-     ESP_LOGI(TAG, "UART Settings - Baud: %u, Data Bits: 8, Stop Bits: 1, Parity: None", uart->get_baud_rate());
- }
- 
- void HLKLD2410SComponent::dump_data_(const char* prefix, const uint8_t* data, size_t len) {
-     if (len == 0) return;
+ void HLKLD2410SComponent::dump_config() {
+     ESP_LOGCONFIG(TAG, "HLK-LD2410S:");
+     ESP_LOGCONFIG(TAG, "  Configuration Mode: %s", this->config_mode_ ? "ON" : "OFF");
+     ESP_LOGCONFIG(TAG, "  Output Mode: %s", this->output_mode_standard_ ? "Standard" : "Minimal");
+     ESP_LOGCONFIG(TAG, "  Response Speed: %d", this->response_speed_);
+     ESP_LOGCONFIG(TAG, "  Unmanned Delay: %ds", this->unmanned_delay_);
+     ESP_LOGCONFIG(TAG, "  Status Report Frequency: %.1fHz", this->status_report_freq_);
+     ESP_LOGCONFIG(TAG, "  Distance Report Frequency: %.1fHz", this->distance_report_freq_);
+     ESP_LOGCONFIG(TAG, "  Gate Range: %d-%d", this->nearest_gate_, this->farthest_gate_);
      
-     char hex[512];
-     char* ptr = hex;
-     for (size_t i = 0; i < len && i < 32; i++) {
-         ptr += sprintf(ptr, "%02X ", data[i]);
-         if ((i + 1) % 16 == 0 && i < len - 1) {
-             ptr += sprintf(ptr, "\n");
+     if (!this->trigger_thresholds_.empty()) {
+         ESP_LOGCONFIG(TAG, "  Trigger Thresholds:");
+         std::string thresh;
+         for (size_t i = 0; i < this->trigger_thresholds_.size(); i++) {
+             char buf[8];
+             sprintf(buf, "%d ", this->trigger_thresholds_[i]);
+             thresh += buf;
+             if ((i + 1) % 8 == 0) {
+                 ESP_LOGCONFIG(TAG, "    %s", thresh.c_str());
+                 thresh.clear();
+             }
+         }
+         if (!thresh.empty()) {
+             ESP_LOGCONFIG(TAG, "    %s", thresh.c_str());
          }
      }
-     if (len > 32) {
-         strcat(ptr, "...");
+     
+     if (!this->hold_thresholds_.empty()) {
+         ESP_LOGCONFIG(TAG, "  Hold Thresholds:");
+         std::string thresh;
+         for (size_t i = 0; i < this->hold_thresholds_.size(); i++) {
+             char buf[8];
+             sprintf(buf, "%d ", this->hold_thresholds_[i]);
+             thresh += buf;
+             if ((i + 1) % 8 == 0) {
+                 ESP_LOGCONFIG(TAG, "    %s", thresh.c_str());
+                 thresh.clear();
+             }
+         }
+         if (!thresh.empty()) {
+             ESP_LOGCONFIG(TAG, "    %s", thresh.c_str());
+         }
      }
-     ESP_LOGD(TAG, "%s (%d bytes):\n%s", prefix, len, hex);
  }
  
  void HLKLD2410SComponent::loop() {
@@ -99,7 +158,7 @@
                  uint8_t state = buffer[7];
                  uint16_t distance = buffer[9] << 8 | buffer[8];  // cm
  
-                 ESP_LOGD(TAG, "Standard packet - Length: %u, Type: 0x%02X, State: %u, Distance: %u cm",
+                 ESP_LOGV(TAG, "Standard packet - Length: %u, Type: 0x%02X, State: %u, Distance: %u cm",
                           length, type, state, distance);
  
                  if (this->distance_sensor_ != nullptr) {
@@ -130,7 +189,7 @@
                  uint8_t target_state = buffer[0];
                  uint16_t distance = buffer[1];  // Distance in cm
  
-                 ESP_LOGD(TAG, "Minimal packet - State: 0x%02X, Distance: %u cm", 
+                 ESP_LOGV(TAG, "Minimal packet - State: 0x%02X, Distance: %u cm", 
                           target_state, distance);
  
                  if (this->distance_sensor_ != nullptr) {
@@ -152,30 +211,6 @@
      if (buffer.size() > 256) {
          buffer.clear();
      }
- }
- 
- bool HLKLD2410SComponent::switch_output_mode_(bool standard_mode) {
-     ESP_LOGI(TAG, "Switching to %s mode", standard_mode ? "standard" : "minimal");
-     
-     if (!enable_configuration()) {
-         ESP_LOGE(TAG, "Failed to enable configuration mode");
-         return false;
-     }
- 
-     std::vector<uint8_t> data = {
-         0x00, 0x00, 0x00,  // First three bytes are always 0
-         static_cast<uint8_t>(standard_mode ? 0x01 : 0x00),  // Mode selection
-         0x00, 0x00  // Last two bytes are always 0
-     };
- 
-     bool success = write_command_(CommandWord::SWITCH_OUTPUT_MODE, data);
-     
-     if (!disable_configuration()) {
-         ESP_LOGE(TAG, "Failed to disable configuration mode");
-         return false;
-     }
- 
-     return success;
  }
  
  bool HLKLD2410SComponent::enable_configuration() {
@@ -203,7 +238,7 @@
  }
  
  bool HLKLD2410SComponent::write_command_(CommandWord command, const std::vector<uint8_t> &data) {
-     ESP_LOGD(TAG, "Writing command 0x%04X", static_cast<uint16_t>(command));
+     ESP_LOGV(TAG, "Writing command 0x%04X", static_cast<uint16_t>(command));
      
      // Write frame header
      write_array(CONFIG_FRAME_HEADER, sizeof(CONFIG_FRAME_HEADER));
@@ -235,14 +270,13 @@
      std::vector<uint8_t> buffer;
      buffer.reserve(32);  // Reserve space for the ACK frame
      
-     ESP_LOGD(TAG, "Waiting for ACK for command 0x%04X", static_cast<uint16_t>(expected_cmd));
+     ESP_LOGV(TAG, "Waiting for ACK for command 0x%04X", static_cast<uint16_t>(expected_cmd));
      
      while (millis() - start < ACK_TIMEOUT_MS) {
          if (available()) {
              uint8_t byte;
              read_byte(&byte);
              buffer.push_back(byte);
-             dump_data_("ACK buffer", buffer.data(), buffer.size());
              
              // Look for frame header in the buffer
              if (buffer.size() >= 4) {
@@ -255,7 +289,7 @@
                              
                              // Make sure we have the complete frame
                              if (buffer.size() >= i + 8 + length + 4) {  // Add frame end length
-                                 ESP_LOGD(TAG, "Received ACK - CMD: 0x%04X, Length: %u", 
+                                 ESP_LOGV(TAG, "Received ACK - CMD: 0x%04X, Length: %u", 
                                           received_cmd, length);
                                  
                                  // Verify frame end
@@ -305,69 +339,111 @@
      return memcmp(buf, CONFIG_FRAME_END, sizeof(CONFIG_FRAME_END)) == 0;
  }
  
- void HLKLD2410SComponent::process_simple_frame_(uint8_t frame_type, uint16_t data_length, const uint8_t *data) {
-     if (data_length < 2) {
-         ESP_LOGW(TAG, "Simple frame data too short");
-         return;
+ void HLKLD2410SComponent::check_uart_settings_() {
+     auto *uart = (esphome::uart::UARTComponent *)this->parent_;
+     if (uart->get_baud_rate() != 115200) {
+         ESP_LOGE(TAG, "Incorrect baud rate! HLK-LD2410S requires 115200 baud. Current: %u", uart->get_baud_rate());
      }
- 
-     uint16_t distance = (data[0] << 8) | data[1];
-     ESP_LOGD(TAG, "Simple frame - distance: %u cm", distance);
-     
-     if (this->distance_sensor_ != nullptr) {
-         this->distance_sensor_->publish_state(distance / 100.0f);  // Convert to meters
-     }
- 
-     bool presence = (distance > 0);
-     if (this->presence_sensor_ != nullptr) {
-         this->presence_sensor_->publish_state(presence);
-     }
- 
-     if (presence) {
-         this->last_presence_detected_ = millis();
-         ESP_LOGI(TAG, "Presence detected at distance: %u cm", distance);
-     }
+     ESP_LOGI(TAG, "UART Settings - Baud: %u, Data Bits: 8, Stop Bits: 1, Parity: None", uart->get_baud_rate());
  }
  
- void HLKLD2410SComponent::process_standard_frame_(uint8_t frame_type, uint16_t data_length, const uint8_t *data) {
-     if (data_length < 4) {
-         ESP_LOGW(TAG, "Standard frame data too short");
-         return;
-     }
- 
-     uint16_t distance = (data[0] << 8) | data[1];
-     uint8_t motion_energy = data[2];
-     uint8_t static_energy = data[3];
+ bool HLKLD2410SComponent::write_parameters_() {
+     ESP_LOGI(TAG, "Writing general parameters");
      
-     ESP_LOGD(TAG, "Standard frame - distance: %u cm, motion: %u, static: %u", 
-              distance, motion_energy, static_energy);
+     std::vector<uint8_t> data;
      
-     // Process energy values for each gate if available
-     if (data_length >= 4 + MAX_GATES) {
-         for (size_t i = 0; i < MAX_GATES; i++) {
-             uint8_t energy = data[4 + i];
-             auto it = this->gate_energy_sensors_.find(i);
-             if (it != this->gate_energy_sensors_.end() && it->second != nullptr) {
-                 it->second->publish_state(energy);
-             }
-         }
-     }
- 
-     if (this->distance_sensor_ != nullptr) {
-         this->distance_sensor_->publish_state(distance / 100.0f);  // Convert to meters
-     }
- 
-     bool presence = (distance > 0);
-     if (this->presence_sensor_ != nullptr) {
-         this->presence_sensor_->publish_state(presence);
-     }
- 
-     if (presence) {
-         this->last_presence_detected_ = millis();
-         ESP_LOGI(TAG, "Presence detected at distance: %u cm with motion energy: %u, static energy: %u", 
-                  distance, motion_energy, static_energy);
-     }
+     // Add farthest gate parameter (0x05)
+     data.push_back(0x05);
+     data.push_back(0x00);
+     data.push_back(this->farthest_gate_);
+     data.push_back(0x00);
+     data.push_back(0x00);
+     data.push_back(0x00);
+     
+     // Add nearest gate parameter (0x0A)
+     data.push_back(0x0A);
+     data.push_back(0x00);
+     data.push_back(this->nearest_gate_);
+     data.push_back(0x00);
+     data.push_back(0x00);
+     data.push_back(0x00);
+     
+     // Add unmanned delay parameter (0x06)
+     data.push_back(0x06);
+     data.push_back(0x00);
+     data.push_back(this->unmanned_delay_ & 0xFF);
+     data.push_back((this->unmanned_delay_ >> 8) & 0xFF);
+     data.push_back(0x00);
+     data.push_back(0x00);
+     
+     // Add status report frequency parameter (0x02)
+     data.push_back(0x02);
+     data.push_back(0x00);
+     uint8_t status_freq = static_cast<uint8_t>(this->status_report_freq_ * 2);  // Convert to 0.5Hz steps
+     data.push_back(status_freq);
+     data.push_back(0x00);
+     data.push_back(0x00);
+     data.push_back(0x00);
+     
+     // Add distance report frequency parameter (0x0C)
+     data.push_back(0x0C);
+     data.push_back(0x00);
+     uint8_t dist_freq = static_cast<uint8_t>(this->distance_report_freq_ * 2);  // Convert to 0.5Hz steps
+     data.push_back(dist_freq);
+     data.push_back(0x00);
+     data.push_back(0x00);
+     data.push_back(0x00);
+     
+     // Add response speed parameter (0x0B)
+     data.push_back(0x0B);
+     data.push_back(0x00);
+     data.push_back(this->response_speed_);
+     data.push_back(0x00);
+     data.push_back(0x00);
+     data.push_back(0x00);
+     
+     return write_command_(CommandWord::WRITE_PARAMETERS, data);
  }
  
- }  // namespace hlk_ld2410s
- }  // namespace esphome
+ bool HLKLD2410SComponent::write_trigger_thresholds_() {
+     if (this->trigger_thresholds_.size() != 16) {
+         ESP_LOGE(TAG, "Invalid trigger thresholds size: %d", this->trigger_thresholds_.size());
+         return false;
+     }
+     
+     std::vector<uint8_t> data;
+     for (size_t i = 0; i < 16; i++) {
+         data.push_back(i & 0xFF);
+         data.push_back(0x00);
+         data.push_back(this->trigger_thresholds_[i]);
+         data.push_back(0x00);
+         data.push_back(0x00);
+         data.push_back(0x00);
+     }
+     
+     return write_command_(CommandWord::WRITE_TRIGGER_THRESHOLD, data);
+ }
+ 
+ bool HLKLD2410SComponent::write_hold_thresholds_() {
+     if (this->hold_thresholds_.size() != 16) {
+         ESP_LOGE(TAG, "Invalid hold thresholds size: %d", this->hold_thresholds_.size());
+         return false;
+     }
+     
+     std::vector<uint8_t> data;
+     for (size_t i = 0; i < 16; i++) {
+         data.push_back(i & 0xFF);
+         data.push_back(0x00);
+         data.push_back(this->hold_thresholds_[i]);
+         data.push_back(0x00);
+         data.push_back(0x00);
+         data.push_back(0x00);
+     }
+     
+     return write_command_(CommandWord::WRITE_HOLD_THRESHOLD, data);
+ }
+ 
+ bool HLKLD2410SComponent::set_auto_threshold_() {
+     std::vector<uint8_t> data = {
+         this->auto_threshold_trigger_,
+         0
