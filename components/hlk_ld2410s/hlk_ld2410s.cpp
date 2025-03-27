@@ -2,7 +2,7 @@
  * HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
  * 
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 13:06:32 UTC
+ * Creation Date/Time: 2025-03-27 13:12:05 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -12,13 +12,17 @@
  namespace hlk_ld2410s {
  
  static const char *const TAG = "hlk_ld2410s";
+ static const uint32_t UART_READ_TIMEOUT_MS = 50;
+ static const uint32_t COMMAND_DELAY_MS = 100;
+ static const size_t RX_BUFFER_SIZE = 256;
  
  void EnableConfigButton::press_action() { this->parent_->enable_configuration(); }
  void DisableConfigButton::press_action() { this->parent_->disable_configuration(); }
  
  void HLKLD2410SComponent::setup() {
      // Clear any garbage data in the buffer
-     this->flush();
+     flush();
+     delay(COMMAND_DELAY_MS);  // Give some time for the sensor to initialize
      
      // Set initial state
      if (this->config_mode_sensor_ != nullptr) {
@@ -145,23 +149,30 @@
          return false;
      }
  
-     if (!write_command_(CommandWord::ENABLE_CONFIGURATION)) {
-         ESP_LOGE(TAG, "Failed to send enable configuration command");
-         return false;
+     // Try multiple times if needed
+     for (int retry = 0; retry < 3; retry++) {
+         if (retry > 0) {
+             ESP_LOGW(TAG, "Retrying enable configuration (attempt %d)", retry + 1);
+             delay(COMMAND_DELAY_MS * 2);
+         }
+ 
+         if (!write_command_(CommandWord::ENABLE_CONFIGURATION)) {
+             ESP_LOGE(TAG, "Failed to send enable configuration command");
+             continue;
+         }
+ 
+         if (read_ack_(CommandWord::ENABLE_CONFIGURATION)) {
+             this->config_mode_ = true;
+             if (this->config_mode_sensor_ != nullptr) {
+                 this->config_mode_sensor_->publish_state(true);
+             }
+             ESP_LOGI(TAG, "Entered configuration mode");
+             return true;
+         }
      }
  
-     if (!read_ack_(CommandWord::ENABLE_CONFIGURATION)) {
-         ESP_LOGE(TAG, "Failed to receive enable configuration ACK");
-         return false;
-     }
- 
-     this->config_mode_ = true;
-     if (this->config_mode_sensor_ != nullptr) {
-         this->config_mode_sensor_->publish_state(true);
-     }
- 
-     ESP_LOGI(TAG, "Entered configuration mode");
-     return true;
+     ESP_LOGE(TAG, "Failed to enter configuration mode after 3 attempts");
+     return false;
  }
  
  bool HLKLD2410SComponent::disable_configuration() {
@@ -170,26 +181,39 @@
          return false;
      }
  
-     if (!write_command_(CommandWord::DISABLE_CONFIGURATION)) {
-         ESP_LOGE(TAG, "Failed to send disable configuration command");
-         return false;
+     // Try multiple times if needed
+     for (int retry = 0; retry < 3; retry++) {
+         if (retry > 0) {
+             ESP_LOGW(TAG, "Retrying disable configuration (attempt %d)", retry + 1);
+             delay(COMMAND_DELAY_MS * 2);
+         }
+ 
+         if (!write_command_(CommandWord::DISABLE_CONFIGURATION)) {
+             ESP_LOGE(TAG, "Failed to send disable configuration command");
+             continue;
+         }
+ 
+         if (read_ack_(CommandWord::DISABLE_CONFIGURATION)) {
+             this->config_mode_ = false;
+             if (this->config_mode_sensor_ != nullptr) {
+                 this->config_mode_sensor_->publish_state(false);
+             }
+             ESP_LOGI(TAG, "Exited configuration mode");
+             return true;
+         }
      }
  
-     if (!read_ack_(CommandWord::DISABLE_CONFIGURATION)) {
-         ESP_LOGE(TAG, "Failed to receive disable configuration ACK");
-         return false;
-     }
- 
-     this->config_mode_ = false;
-     if (this->config_mode_sensor_ != nullptr) {
-         this->config_mode_sensor_->publish_state(false);
-     }
- 
-     ESP_LOGI(TAG, "Exited configuration mode");
-     return true;
+     ESP_LOGE(TAG, "Failed to exit configuration mode after 3 attempts");
+     return false;
  }
  
  bool HLKLD2410SComponent::write_command_(CommandWord command, const std::vector<uint8_t> &data) {
+     // Flush any existing data first
+     flush();
+     
+     // Add a small delay before sending new command
+     delay(COMMAND_DELAY_MS);
+     
      // Write frame header
      write_array(CONFIG_FRAME_HEADER, sizeof(CONFIG_FRAME_HEADER));
  
@@ -208,51 +232,67 @@
  
      // Write frame end
      write_array(CONFIG_FRAME_END, sizeof(CONFIG_FRAME_END));
+     
+     // Flush the written data
+     flush();
+     
+     // Add a small delay after sending command
+     delay(COMMAND_DELAY_MS);
  
      return true;
  }
  
  bool HLKLD2410SComponent::read_ack_(CommandWord expected_cmd) {
-     uint8_t buffer[8];  // ACK frame is 8 bytes
+     uint8_t buffer[RX_BUFFER_SIZE];
+     size_t pos = 0;
      uint32_t start_time = millis();
      
-     // Wait for data with timeout
-     while ((millis() - start_time) < ACK_TIMEOUT_MS) {
-         if (available() >= sizeof(buffer)) {
-             if (read_array(buffer, sizeof(buffer)) != sizeof(buffer)) {
-                 ESP_LOGW(TAG, "Failed to read complete ACK frame");
+     // Clear any existing data
+     flush();
+     
+     while ((millis() - start_time) < UART_READ_TIMEOUT_MS) {
+         if (available()) {
+             if (pos >= sizeof(buffer)) {
+                 ESP_LOGW(TAG, "Buffer overflow while reading ACK");
+                 flush();
                  return false;
              }
- 
-             // Verify frame header (first 4 bytes should be FD FC FB FA)
-             if (!verify_frame_header_(buffer, 4)) {
-                 // Clear buffer and try again
-                 flush();
+             
+             int byte = read();
+             if (byte < 0) {
+                 ESP_LOGW(TAG, "UART read error");
                  continue;
              }
- 
-             // Extract command word (bytes 4-5)
-             uint16_t received_cmd = (buffer[4] << 8) | buffer[5];
              
-             // Verify frame end (last 2 bytes should be 04 03 02 01)
-             if (!verify_frame_end_(&buffer[6], 2)) {
-                 ESP_LOGW(TAG, "Invalid ACK frame end");
-                 return false;
+             buffer[pos++] = static_cast<uint8_t>(byte);
+             
+             // Look for frame header in received data
+             if (pos >= 4) {
+                 for (size_t i = 0; i <= pos - 4; i++) {
+                     if (verify_frame_header_(&buffer[i], 4)) {
+                         // We found a valid header, now check if we have enough data for a complete frame
+                         if (pos >= i + 8) {  // Complete ACK frame is 8 bytes
+                             // Extract command word
+                             uint16_t received_cmd = (buffer[i + 4] << 8) | buffer[i + 5];
+                             
+                             // Verify frame end
+                             if (verify_frame_end_(&buffer[i + 6], 2)) {
+                                 if (received_cmd != static_cast<uint16_t>(expected_cmd)) {
+                                     ESP_LOGW(TAG, "Unexpected ACK command: 0x%04X, expected: 0x%04X", 
+                                              received_cmd, static_cast<uint16_t>(expected_cmd));
+                                     return false;
+                                 }
+                                 return true;
+                             }
+                         }
+                     }
+                 }
              }
- 
-             // Check if received command matches expected
-             if (received_cmd != static_cast<uint16_t>(expected_cmd)) {
-                 ESP_LOGW(TAG, "Unexpected ACK command: 0x%04X (expected: 0x%04X)", 
-                          received_cmd, static_cast<uint16_t>(expected_cmd));
-                 return false;
-             }
- 
-             return true;
          }
-         delay(1);  // Small delay to prevent tight loop
+         delay(1);
      }
- 
-     ESP_LOGW(TAG, "ACK timeout");
+     
+     ESP_LOGW(TAG, "ACK timeout after %u ms", UART_READ_TIMEOUT_MS);
      return false;
  }
  
