@@ -2,7 +2,7 @@
  * HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
  * 
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 13:12:05 UTC
+ * Creation Date/Time: 2025-03-27 13:14:53 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -11,24 +11,13 @@
  namespace esphome {
  namespace hlk_ld2410s {
  
- static const char *const TAG = "hlk_ld2410s";
+ // Remove the TAG definition as it's already in the header
  static const uint32_t UART_READ_TIMEOUT_MS = 50;
  static const uint32_t COMMAND_DELAY_MS = 100;
  static const size_t RX_BUFFER_SIZE = 256;
  
  void EnableConfigButton::press_action() { this->parent_->enable_configuration(); }
  void DisableConfigButton::press_action() { this->parent_->disable_configuration(); }
- 
- void HLKLD2410SComponent::setup() {
-     // Clear any garbage data in the buffer
-     flush();
-     delay(COMMAND_DELAY_MS);  // Give some time for the sensor to initialize
-     
-     // Set initial state
-     if (this->config_mode_sensor_ != nullptr) {
-         this->config_mode_sensor_->publish_state(false);
-     }
- }
  
  void HLKLD2410SComponent::loop() {
      uint32_t now = millis();
@@ -41,7 +30,8 @@
  
      uint8_t header[4];
      if (available() >= sizeof(header)) {
-         if (read_array(header, sizeof(header)) != sizeof(header)) {
+         size_t read_size = read_array(header, sizeof(header));
+         if (read_size < sizeof(header)) {
              ESP_LOGW(TAG, "Failed to read frame header");
              return;
          }
@@ -54,11 +44,19 @@
  
          // Read frame type and data length
          uint8_t frame_type;
-         uint16_t data_length;
-         if (!read_byte(&frame_type) || !read_byte(&data_length)) {
-             ESP_LOGW(TAG, "Failed to read frame type or length");
+         uint8_t length_bytes[2];
+         
+         if (!read_byte(&frame_type)) {
+             ESP_LOGW(TAG, "Failed to read frame type");
              return;
          }
+         
+         if (read_array(length_bytes, 2) != 2) {
+             ESP_LOGW(TAG, "Failed to read data length");
+             return;
+         }
+         
+         uint16_t data_length = (length_bytes[0] << 8) | length_bytes[1];
  
          // Read frame data
          std::vector<uint8_t> data(data_length);
@@ -69,7 +67,8 @@
  
          // Read and verify frame end
          uint8_t end[4];
-         if (read_array(end, sizeof(end)) != sizeof(end) || !verify_frame_end_(end, sizeof(end))) {
+         size_t end_size = read_array(end, sizeof(end));
+         if (end_size < sizeof(end) || !verify_frame_end_(end, sizeof(end))) {
              ESP_LOGW(TAG, "Invalid frame end");
              return;
          }
