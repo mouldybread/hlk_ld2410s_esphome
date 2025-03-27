@@ -1,7 +1,7 @@
 import esphome.config_validation as cv
 import esphome.codegen as cg
 from esphome.const import CONF_ID, CONF_NAME, UNIT_CENTIMETER
-from esphome import sensor
+from esphome.components import sensor
 from . import HLKLD2410SComponent, hlk_ld2410s_ns
 
 CONF_HLK_LD2410S_ID = 'hlk_ld2410s_id'
@@ -10,11 +10,11 @@ CONF_PRESENCE = 'presence'
 
 HLKLD2410SSensor = hlk_ld2410s_ns.class_('HLKLD2410SSensor', sensor.Sensor)
 
-CONFIG_SCHEMA = sensor.sensor_schema(HLKLD2410SSensor).extend({
+CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(CONF_HLK_LD2410S_ID): cv.use_id(HLKLD2410SComponent),
     cv.Optional(CONF_DISTANCE): sensor.sensor_schema(UNIT_CENTIMETER),
     cv.Optional(CONF_PRESENCE): sensor.sensor_schema(),
-})
+}).extend(cv.COMPONENT_SCHEMA)
 
 def to_code(config):
     parent = yield cg.get_variable(config[CONF_HLK_LD2410S_ID])

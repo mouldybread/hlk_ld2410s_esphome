@@ -1,7 +1,7 @@
 import esphome.config_validation as cv
 import esphome.codegen as cg
-from esphome.const import CONF_ID, CONF_NAME, UNIT_CENTIMETER
-from esphome.components import uart, sensor
+from esphome.const import CONF_ID
+from esphome.components import uart
 
 hlk_ld2410s_ns = cg.esphome_ns.namespace('hlk_ld2410s')
 HLKLD2410SComponent = hlk_ld2410s_ns.class_('HLKLD2410SComponent', cg.Component, uart.UARTDevice)
