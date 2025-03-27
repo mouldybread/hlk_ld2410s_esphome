@@ -94,83 +94,65 @@
  
  void HLKLD2410SComponent::read_data_() {
      uint8_t data;
-     std::vector<uint8_t> buffer;
+     static std::vector<uint8_t> buffer;  // Make static to preserve between calls
+     
+     // Read one byte at a time with timeout
+     if (!this->read_byte_(&data, 10)) {  // Reduced timeout to 10ms
+         return;
+     }
+     buffer.push_back(data);
  
-     // Read until we find the header sequence
-     while (this->available()) {
-         if (!this->read_byte_(&data)) {
-             return;
-         }
-         buffer.push_back(data);
+     // Keep buffer at reasonable size
+     if (buffer.size() > 32) {
+         buffer.erase(buffer.begin());
+     }
  
-         if (buffer.size() >= 4) {
-             if (buffer[buffer.size() - 4] == DATA_FRAME_HEADER[0] &&
-                 buffer[buffer.size() - 3] == DATA_FRAME_HEADER[1] &&
-                 buffer[buffer.size() - 2] == DATA_FRAME_HEADER[2] &&
-                 buffer[buffer.size() - 1] == DATA_FRAME_HEADER[3]) {
+     // Check if we have enough data for header
+     if (buffer.size() >= 4) {
+         // Look for header sequence
+         for (size_t i = 0; i <= buffer.size() - 4; i++) {
+             if (buffer[i] == DATA_FRAME_HEADER[0] &&
+                 buffer[i + 1] == DATA_FRAME_HEADER[1] &&
+                 buffer[i + 2] == DATA_FRAME_HEADER[2] &&
+                 buffer[i + 3] == DATA_FRAME_HEADER[3]) {
+                 
+                 // Found header - remove everything before it
+                 if (i > 0) {
+                     buffer.erase(buffer.begin(), buffer.begin() + i);
+                 }
+ 
+                 // Now process the frame if we have enough data
+                 if (buffer.size() >= 6) {  // Header(4) + Length(2)
+                     uint16_t length = buffer[4] | (buffer[5] << 8);
+                     size_t total_frame_size = 4 + 2 + length + 1;  // Header + Length + Payload + Checksum
+ 
+                     if (buffer.size() >= total_frame_size) {
+                         // We have a complete frame - process it
+                         std::vector<uint8_t> payload(buffer.begin() + 7, buffer.begin() + 7 + length - 1);
+                         uint8_t command = buffer[6];
+                         uint8_t checksum = buffer[total_frame_size - 1];
+ 
+                         // Verify checksum
+                         std::vector<uint8_t> check_data(buffer.begin(), buffer.begin() + total_frame_size - 1);
+                         if (checksum == this->calculate_checksum_(check_data)) {
+                             // Process command
+                             switch (command) {
+                                 case static_cast<uint8_t>(CommandType::CMD_ENGINEERING_DATA):
+                                     this->handle_engineering_data_(payload);
+                                     break;
+                                 case static_cast<uint8_t>(CommandType::CMD_SIMPLE_DATA):
+                                     this->handle_simple_data_(payload);
+                                     break;
+                             }
+                         }
+ 
+                         // Remove processed frame
+                         buffer.erase(buffer.begin(), buffer.begin() + total_frame_size);
+                     }
+                 }
                  break;
              }
          }
-     }
- 
-     // Read length bytes
-     if (!this->read_byte_(&data)) {
-         return;
-     }
-     uint16_t length = data;
-     if (!this->read_byte_(&data)) {
-         return;
-     }
-     length |= (data << 8);
- 
-     if (length < DATA_FRAME_MIN_LENGTH) {
-         ESP_LOGW(TAG, "%s: Frame too short", ERROR_VALIDATION);
-         return;
-     }
- 
-     // Read command
-     if (!this->read_byte_(&data)) {
-         return;
-     }
-     uint8_t command = data;
- 
-     // Read payload
-     std::vector<uint8_t> payload;
-     if (!this->read_array_(payload, length - 1)) {
-         return;
-     }
- 
-     // Read checksum
-     if (!this->read_byte_(&data)) {
-         return;
-     }
-     uint8_t checksum = data;
- 
-     // Verify checksum
-     std::vector<uint8_t> check_data;
-     check_data.reserve(4 + 2 + 1 + payload.size());
-     check_data.insert(check_data.end(), DATA_FRAME_HEADER, DATA_FRAME_HEADER + 4);
-     check_data.push_back(length & 0xFF);
-     check_data.push_back((length >> 8) & 0xFF);
-     check_data.push_back(command);
-     check_data.insert(check_data.end(), payload.begin(), payload.end());
- 
-     if (checksum != this->calculate_checksum_(check_data)) {
-         ESP_LOGW(TAG, "%s: Invalid checksum", ERROR_VALIDATION);
-         return;
-     }
- 
-     // Process command
-     switch (command) {
-         case static_cast<uint8_t>(CommandType::CMD_ENGINEERING_DATA):
-             this->handle_engineering_data_(payload);
-             break;
-         case static_cast<uint8_t>(CommandType::CMD_SIMPLE_DATA):
-             this->handle_simple_data_(payload);
-             break;
-         default:
-             ESP_LOGW(TAG, "Unknown command: 0x%02X", command);
-             break;
      }
  }
  
