@@ -18,11 +18,13 @@ uart:
 hlk_ld2410s:
   uart_id: uart_bus
   # Optional: Throttle sensor updates (minimum time between updates)
-  throttle: 3s
+  throttle: 500ms
+  # Optional: Output mode (standard or minimal)
+  output_mode: true  # true = standard mode, false = minimal mode
   # Optional: Distance sensor
   distance:
     name: "Object Distance"
-    unit_of_measurement: "cm"
+    unit_of_measurement: "m"  # Outputs in meters
   # Optional: Presence detection
   presence:
     name: "Presence"
@@ -32,54 +34,103 @@ hlk_ld2410s:
     name: "Enable Configuration Mode"
   disable_configuration:
     name: "Disable Configuration Mode"
+  # Optional: Energy gate sensors (only in standard mode)
+  gate_0_energy:
+    name: "Gate 0 Energy"
+  gate_1_energy:
+    name: "Gate 1 Energy"
+  # Add more gates as needed (up to 15)
 ```
 
-The `hlk_ld2410s` component provides support for the Hi-Link HLK-LD2410S microwave radar sensor. This sensor can detect human presence and measure the distance to detected objects.
+# HLK-LD2410S ESPHome Component
 
-## Configuration variables:
+Support for the Hi-Link HLK-LD2410S microwave radar sensor in ESPHome. This sensor can detect human presence and measure the distance to detected objects.
+
+## Features
+- Distance measurement
+- Presence detection
+- Standard and minimal data output modes
+- Configuration mode support
+- Energy gate values (in standard mode)
+
+## Usage
+
+To use this component in your ESPHome configuration, add the following to your .yaml file:
+
+## Configuration Variables
 
 ### Base Options:
-- **uart_id** (*Required*, id): The ID of the UART bus component
-- **throttle** (*Optional*, Time): Minimum time between sensor updates. Defaults to no throttling.
+- **uart_id** (Required, id): The ID of the UART bus component
+- **throttle** (Optional, Time): Minimum time between sensor updates. Defaults to 50ms.
+- **output_mode** (Optional, boolean): Set to true for standard mode with detailed data, false for minimal mode. Defaults to true.
 
 ### Distance Sensor Options:
-- **distance** (*Optional*): Configure the distance measurement sensor
-  - **name** (*Required*, string): The name of the distance sensor
-  - All other options from [Sensor](https://esphome.io/components/sensor/index.html#config-sensor)
+- **distance** (Optional): Configure the distance measurement sensor
+  - **name** (Required, string): The name of the distance sensor
+  - **unit_of_measurement** (Optional, string): The unit of measurement. Defaults to "m" (meters)
+  - All other options from Sensor
 
 ### Presence Sensor Options:
-- **presence** (*Optional*): Configure the presence detection sensor
-  - **name** (*Required*, string): The name of the presence sensor
-  - All other options from [Binary Sensor](https://esphome.io/components/binary_sensor/index.html#config-binary-sensor)
+- **presence** (Optional): Configure the presence detection sensor
+  - **name** (Required, string): The name of the presence sensor
+  - **device_class** (Optional, string): Sensor device class. Defaults to "occupancy"
+  - All other options from Binary Sensor
 
 ### Configuration Mode Options:
-- **enable_configuration** (*Optional*): Button to enable configuration mode
-  - **name** (*Required*, string): The name of the enable configuration button
-  - All other options from [Button](https://esphome.io/components/button/index.html#config-button)
-- **disable_configuration** (*Optional*): Button to disable configuration mode
-  - **name** (*Required*, string): The name of the disable configuration button
-  - All other options from [Button](https://esphome.io/components/button/index.html#config-button)
+- **enable_configuration** (Optional): Button to enable configuration mode
+  - **name** (Required, string): The name of the enable configuration button
+  - All other options from Button
+- **disable_configuration** (Optional): Button to disable configuration mode
+  - **name** (Required, string): The name of the disable configuration button
+  - All other options from Button
 
-## Example Sensor Data in Home Assistant:
+### Energy Gate Sensors (Standard Mode Only):
+- **gate_X_energy** (Optional): Configure energy sensors for each gate (X = 0-15)
+  - **name** (Required, string): The name of the gate energy sensor
+  - All other options from Sensor
 
-- **Distance Sensor**: Shows the distance to detected objects in centimeters
-- **Presence Sensor**: Shows whether a person is detected (ON) or not (OFF)
-- **Configuration Buttons**: Allow enabling/disabling configuration mode for sensor settings
+## Output Modes
+
+### Minimal Mode
+- Smaller data packets
+- Basic presence detection and distance measurement
+- Lower bandwidth usage
+
+### Standard Mode
+- Detailed data including energy values for each gate
+- Motion and static energy values
+- More accurate presence detection
+- Requires more bandwidth
 
 ## Requirements:
-
 - The sensor must be connected via UART
 - Default UART settings: 115200 baud rate, 8 data bits, no parity, 1 stop bit
+- Stable 3.3V power supply
 
 ## Common Issues:
 
-1. If you see no data from the sensor, check:
-   - UART wiring (TX/RX might need to be swapped)
-   - UART configuration (baud rate, pins)
-   - Power supply (sensor requires stable 3.3V)
+### No Data from Sensor:
+- Check UART wiring (TX/RX might need to be swapped)
+- Verify UART configuration (baud rate, pins)
+- Confirm power supply (sensor requires stable 3.3V)
+- Try both output modes (minimal/standard)
 
-2. If distance readings are unstable:
-   - Try increasing the throttle time
-   - Check for interference sources
-   - Ensure proper mounting height and angle
+### Unstable Readings:
+- Increase the throttle time
+- Check for interference sources
+- Verify proper mounting height and angle
+- Consider switching output modes
+
+### Configuration Issues:
+1. Enable configuration mode
+2. Make changes
+3. Disable configuration mode
+4. If stuck, power cycle the sensor
+
+## Version History
+- 2025-03-27: Added standard mode support, improved data parsing
+- Initial Release: Basic functionality with minimal mode
+
+Created by: github.com/mouldybread
+Last Updated: 2025-03-27 14:40:47 UTC
 ```
