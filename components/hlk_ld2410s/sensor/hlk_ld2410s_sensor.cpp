@@ -1,15 +1,15 @@
-#include "hlk_ld2410s.h"
+#include "hlk_ld2410s_sensor.h"
 
 namespace esphome {
 namespace hlk_ld2410s {
 
-HLKLD2410SComponent::HLKLD2410SComponent(uart::UARTComponent *parent) : uart::UARTDevice(parent) {}
+HLKLD2410SSensor::HLKLD2410SSensor() {}
 
-void HLKLD2410SComponent::setup() {
+void HLKLD2410SSensor::setup() {
   // Initialization code
 }
 
-void HLKLD2410SComponent::loop() {
+void HLKLD2410SSensor::loop() {
   const int max_data_length = 64;
   uint8_t data[max_data_length];
   size_t length = this->available();
@@ -19,7 +19,11 @@ void HLKLD2410SComponent::loop() {
   }
 }
 
-void HLKLD2410SComponent::parse_data_(const uint8_t *data, size_t length) {
+void HLKLD2410SSensor::update() {
+  // Update sensor values
+}
+
+void HLKLD2410SSensor::parse_data_(const uint8_t *data, size_t length) {
   // Parse data and update sensors
   if (length >= 2 && this->distance_sensor_ != nullptr) {
     int distance = data[0] * 256 + data[1];
