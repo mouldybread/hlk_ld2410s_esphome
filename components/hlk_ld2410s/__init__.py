@@ -2,7 +2,7 @@
 HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
 
 Created by github.com/mouldybread
-Creation Date/Time: 2025-03-27 12:17:45 UTC
+Creation Date/Time: 2025-03-27 12:56:30 UTC
 """
 
 import esphome.codegen as cg
@@ -10,6 +10,7 @@ import esphome.config_validation as cv
 from esphome.components import uart, sensor, binary_sensor, button, select, number
 from esphome.const import (
     CONF_ID,
+    CONF_UART_ID,
     CONF_THROTTLE,
     CONF_NAME,
     CONF_ICON,
@@ -114,6 +115,7 @@ CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(HLKLD2410SComponent),
+            cv.Required(CONF_UART_ID): cv.use_id(uart.UARTComponent),
             cv.Optional(CONF_THROTTLE, default="50ms"): cv.positive_time_period_milliseconds,
             cv.Optional(CONF_OUTPUT_MODE, default="Standard"): cv.enum(
                 {"Standard": True, "Simple": False}, upper=False
@@ -167,9 +169,9 @@ CONFIG_SCHEMA = cv.All(
 )
 
 async def to_code(config):
-    var = cg.new_Pvariable(config[CONF_ID])
+    uart_component = await cg.get_variable(config[CONF_UART_ID])
+    var = cg.new_Pvariable(config[CONF_ID], uart_component)
     await cg.register_component(var, config)
-    await uart.register_uart_device(var, config)
 
     if CONF_THROTTLE in config:
         cg.add(var.set_throttle(config[CONF_THROTTLE]))
@@ -194,14 +196,14 @@ async def to_code(config):
 
     if CONF_ENABLE_CONFIGURATION in config:
         conf = config[CONF_ENABLE_CONFIGURATION]
-        btn = cg.new_Pvariable(conf[CONF_ID])
+        btn = cg.new_Pvariable(conf[CONF_ID], var)
         await cg.register_component(btn, conf)
         await button.register_button(btn, conf)
         cg.add(var.set_enable_config_button(btn))
 
     if CONF_DISABLE_CONFIGURATION in config:
         conf = config[CONF_DISABLE_CONFIGURATION]
-        btn = cg.new_Pvariable(conf[CONF_ID])
+        btn = cg.new_Pvariable(conf[CONF_ID], var)
         await cg.register_component(btn, conf)
         await button.register_button(btn, conf)
         cg.add(var.set_disable_config_button(btn))
@@ -234,9 +236,3 @@ async def to_code(config):
             conf[CONF_HOLD_FACTOR],
             conf[CONF_SCAN_TIME]
         ))
-        
-    if CONF_GATES in config:
-        for gate_id, gate_config in config[CONF_GATES].items():
-            if CONF_ENERGY in gate_config:
-                sens = await sensor.new_sensor(gate_config[CONF_ENERGY])
-                cg.add(var.set_gate_energy_sensor(gate_id, sens))
