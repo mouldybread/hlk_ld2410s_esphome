@@ -5,9 +5,8 @@ from esphome.const import (
     CONF_DISTANCE,
     UNIT_CENTIMETER,
     DEVICE_CLASS_DISTANCE,
-    DEVICE_CLASS_OCCUPANCY,
     STATE_CLASS_MEASUREMENT,
-    ICON_RULER,  # Changed from ICON_ARROW_EXPAND_HORIZONTAL
+    ICON_RULER,
     ICON_MOTION_SENSOR,
 )
 from esphome.components import sensor, uart
@@ -36,7 +35,6 @@ CONFIG_SCHEMA = cv.Schema({
     ),
     cv.Optional(CONF_PRESENCE): sensor.sensor_schema(
         accuracy_decimals=0,
-        device_class=DEVICE_CLASS_OCCUPANCY,
         state_class=STATE_CLASS_MEASUREMENT,
         icon=ICON_MOTION_SENSOR,
     ),
