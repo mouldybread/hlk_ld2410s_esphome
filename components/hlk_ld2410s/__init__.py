@@ -8,6 +8,7 @@ AUTO_LOAD = ['sensor']
 
 # Define our own constants
 CONF_PRESENCE = "presence"
+CONF_UART_ID = "uart_id"  # Add UART ID configuration
 
 hlk_ld2410s_ns = cg.esphome_ns.namespace('hlk_ld2410s')
 HLKLD2410SComponent = hlk_ld2410s_ns.class_('HLKLD2410SComponent', cg.Component, uart.UARTDevice)
@@ -15,6 +16,7 @@ HLKLD2410SComponent = hlk_ld2410s_ns.class_('HLKLD2410SComponent', cg.Component,
 # Configuration schema for the component
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(HLKLD2410SComponent),
+    cv.GenerateID(CONF_UART_ID): cv.use_id(uart.UARTComponent),  # Add UART ID to schema
     cv.Optional(CONF_DISTANCE): sensor.sensor_schema(
         unit_of_measurement=UNIT_CENTIMETER,
         accuracy_decimals=0,
@@ -22,12 +24,12 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional(CONF_PRESENCE): sensor.sensor_schema(
         accuracy_decimals=0,
     ),
-}).extend(cv.COMPONENT_SCHEMA).extend(uart.UART_DEVICE_SCHEMA)
+}).extend(cv.COMPONENT_SCHEMA)
 
 async def to_code(config):
-    var = cg.new_Pvariable(config[CONF_ID])
+    uart_component = await cg.get_variable(config[CONF_UART_ID])
+    var = cg.new_Pvariable(config[CONF_ID], uart_component)  # Pass UART component to constructor
     await cg.register_component(var, config)
-    await uart.register_uart_device(var, config)
     
     if CONF_DISTANCE in config:
         sens = await sensor.new_sensor(config[CONF_DISTANCE])
