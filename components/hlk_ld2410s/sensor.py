@@ -1,6 +1,6 @@
 import esphome.config_validation as cv
 import esphome.codegen as cg
-from esphome.const import CONF_ID, CONF_NAME, UNIT_CENTIMETER
+from esphome.const import CONF_ID, UNIT_CENTIMETER
 from esphome.components import sensor
 from . import HLKLD2410SComponent, hlk_ld2410s_ns
 
