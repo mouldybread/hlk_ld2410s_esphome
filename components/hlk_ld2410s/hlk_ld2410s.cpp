@@ -94,7 +94,7 @@
  
  void HLKLD2410SComponent::read_data_() {
      uint8_t data;
-     static std::vector<uint8_t> buffer;  // Make static to preserve between calls
+     static std::vector<uint8_t> buffer;
      
      // Read one byte at a time with timeout
      if (!this->read_byte_(&data, 10)) {  // Reduced timeout to 10ms
@@ -103,54 +103,75 @@
      buffer.push_back(data);
  
      // Keep buffer at reasonable size
-     if (buffer.size() > 32) {
+     if (buffer.size() > 128) {  // Increased to accommodate full engineering data frame
          buffer.erase(buffer.begin());
      }
  
-     // Check if we have enough data for header
-     if (buffer.size() >= 4) {
-         // Look for header sequence
-         for (size_t i = 0; i <= buffer.size() - 4; i++) {
-             if (buffer[i] == DATA_FRAME_HEADER[0] &&
-                 buffer[i + 1] == DATA_FRAME_HEADER[1] &&
-                 buffer[i + 2] == DATA_FRAME_HEADER[2] &&
-                 buffer[i + 3] == DATA_FRAME_HEADER[3]) {
-                 
-                 // Found header - remove everything before it
-                 if (i > 0) {
-                     buffer.erase(buffer.begin(), buffer.begin() + i);
-                 }
- 
-                 // Now process the frame if we have enough data
-                 if (buffer.size() >= 6) {  // Header(4) + Length(2)
-                     uint16_t length = buffer[4] | (buffer[5] << 8);
-                     size_t total_frame_size = 4 + 2 + length + 1;  // Header + Length + Payload + Checksum
- 
-                     if (buffer.size() >= total_frame_size) {
-                         // We have a complete frame - process it
-                         std::vector<uint8_t> payload(buffer.begin() + 7, buffer.begin() + 7 + length - 1);
-                         uint8_t command = buffer[6];
-                         uint8_t checksum = buffer[total_frame_size - 1];
- 
-                         // Verify checksum
-                         std::vector<uint8_t> check_data(buffer.begin(), buffer.begin() + total_frame_size - 1);
-                         if (checksum == this->calculate_checksum_(check_data)) {
-                             // Process command
-                             switch (command) {
-                                 case static_cast<uint8_t>(CommandType::CMD_ENGINEERING_DATA):
-                                     this->handle_engineering_data_(payload);
-                                     break;
-                                 case static_cast<uint8_t>(CommandType::CMD_SIMPLE_DATA):
-                                     this->handle_simple_data_(payload);
-                                     break;
-                             }
-                         }
- 
-                         // Remove processed frame
-                         buffer.erase(buffer.begin(), buffer.begin() + total_frame_size);
+     if (this->output_mode_) {  // Engineering mode
+         // Check for standard data frame header
+         if (buffer.size() >= 4) {
+             for (size_t i = 0; i <= buffer.size() - 4; i++) {
+                 if (buffer[i] == 0xF4 && buffer[i + 1] == 0xF3 &&
+                     buffer[i + 2] == 0xF2 && buffer[i + 3] == 0xF1) {
+                     
+                     // Found header - remove everything before it
+                     if (i > 0) {
+                         buffer.erase(buffer.begin(), buffer.begin() + i);
                      }
+ 
+                     // Check if we have complete frame
+                     if (buffer.size() >= 75) {  // Minimum frame size: 4(header) + 2(length) + 1(type) + 1(state) + 2(distance) + 2(reserved) + 64(energy) + 4(end)
+                         // Verify frame end
+                         if (buffer[71] == 0xF8 && buffer[72] == 0xF7 &&
+                             buffer[73] == 0xF6 && buffer[74] == 0xF5) {
+                             
+                             // Extract data
+                             uint8_t target_state = buffer[7];  // After header(4) + length(2) + type(1)
+                             uint16_t distance = buffer[8] | (buffer[9] << 8);
+                             
+                             // Process data
+                             if (this->distance_sensor_ != nullptr) {
+                                 this->distance_sensor_->publish_state(distance / 100.0f);
+                             }
+                             if (this->presence_sensor_ != nullptr) {
+                                 this->presence_sensor_->publish_state(target_state > 0);
+                             }
+ 
+                             // Process gate energy values if needed
+                             for (uint8_t i = 0; i < MAX_GATES; i++) {
+                                 if (this->gate_energy_sensors_[i] != nullptr) {
+                                     this->gate_energy_sensors_[i]->publish_state(buffer[12 + i]);  // After header(4) + length(2) + type(1) + state(1) + distance(2) + reserved(2)
+                                 }
+                             }
+ 
+                             // Remove processed frame
+                             buffer.erase(buffer.begin(), buffer.begin() + 75);
+                         }
+                     }
+                     break;
                  }
-                 break;
+             }
+         }
+     } else {  // Simple mode
+         // Check for minimal data frame
+         if (buffer.size() >= 4) {  // Minimum frame size: 1(header) + 1(state) + 2(distance)
+             for (size_t i = 0; i <= buffer.size() - 4; i++) {
+                 if (buffer[i] == 0x6E && buffer[i + 3] == 0x62) {  // Check header and end
+                     uint8_t target_state = buffer[i + 1];
+                     uint16_t distance = buffer[i + 2] | (buffer[i + 3] << 8);
+ 
+                     // Process data
+                     if (this->distance_sensor_ != nullptr) {
+                         this->distance_sensor_->publish_state(distance / 100.0f);
+                     }
+                     if (this->presence_sensor_ != nullptr) {
+                         this->presence_sensor_->publish_state(target_state > 0);
+                     }
+ 
+                     // Remove processed frame
+                     buffer.erase(buffer.begin(), buffer.begin() + i + 4);
+                     break;
+                 }
              }
          }
      }
