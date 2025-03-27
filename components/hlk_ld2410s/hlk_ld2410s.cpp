@@ -2,7 +2,7 @@
  * HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
  * 
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 14:12:23 UTC
+ * Creation Date/Time: 2025-03-27 14:29:01 UTC
  */
 
  #include "hlk_ld2410s.h"
@@ -22,16 +22,20 @@
  void HLKLD2410SComponent::setup() {
      ESP_LOGI(TAG, "Setting up HLK-LD2410S...");
      
-     // Set UART baud rate
      this->check_uart_settings_();
-     
-     // Clear any garbage data in the buffer
      this->flush();
-     delay(COMMAND_DELAY_MS);  // Give some time for the sensor to initialize
+     delay(COMMAND_DELAY_MS);
      
      // Set initial state
      if (this->config_mode_sensor_ != nullptr) {
          this->config_mode_sensor_->publish_state(false);
+     }
+ 
+     // Switch to standard mode if configured
+     if (this->output_mode_standard_) {
+         if (!this->switch_output_mode_(true)) {
+             ESP_LOGE(TAG, "Failed to switch to standard output mode");
+         }
      }
  
      ESP_LOGI(TAG, "Setup complete");
@@ -48,178 +52,135 @@
  void HLKLD2410SComponent::dump_data_(const char* prefix, const uint8_t* data, size_t len) {
      if (len == 0) return;
      
-     char hex[128];
+     char hex[512];
      char* ptr = hex;
-     for (size_t i = 0; i < len && i < 16; i++) {  // Limit to 16 bytes to avoid buffer overflow
+     for (size_t i = 0; i < len && i < 32; i++) {
          ptr += sprintf(ptr, "%02X ", data[i]);
+         if ((i + 1) % 16 == 0 && i < len - 1) {
+             ptr += sprintf(ptr, "\n");
+         }
      }
-     if (len > 16) {
+     if (len > 32) {
          strcat(ptr, "...");
      }
-     ESP_LOGV(TAG, "%s: %s", prefix, hex);
+     ESP_LOGD(TAG, "%s (%d bytes):\n%s", prefix, len, hex);
  }
  
  void HLKLD2410SComponent::loop() {
      uint32_t now = millis();
-     
-     // Throttle updates
      if (now - this->last_update_ < this->throttle_) {
          return;
      }
      this->last_update_ = now;
  
-     if (!available()) {
-         return;  // No data available
+     static std::vector<uint8_t> buffer;
+     
+     while (available()) {
+         uint8_t byte;
+         if (read_byte(&byte)) {
+             buffer.push_back(byte);
+         }
      }
  
-     ESP_LOGV(TAG, "Data available: %d bytes", available());
- 
-     // Look for frame header
-     while (available() >= 4) {  // We need at least 4 bytes for the header
-         uint8_t peek_byte = peek();  // Look at next byte without removing it
-         
-         if (peek_byte == 0xFD) {  // Potential start of header
-             ESP_LOGV(TAG, "Found potential frame header");
-             uint8_t header[4];
-             size_t header_read = read_array(header, sizeof(header));
-             
-             if (header_read == sizeof(header) && verify_frame_header_(header, sizeof(header))) {
-                 ESP_LOGD(TAG, "Valid frame header found");
-                 // Valid header found, now read rest of frame
-                 uint8_t frame_type;
-                 uint8_t length_bytes[2];
+     while (buffer.size() >= 5) {
+         if (this->output_mode_standard_) {
+             // Standard data format: F4 F3 F2 F1 | length(2) | type(1) | state(1) | distance(2) | reserved(2) | energy(64) | F8 F7 F6 F5
+             if (buffer.size() >= 4 && 
+                 buffer[0] == 0xF1 && buffer[1] == 0xF2 && 
+                 buffer[2] == 0xF3 && buffer[3] == 0xF4) {
                  
-                 if (!read_byte(&frame_type)) {
-                     ESP_LOGW(TAG, "Failed to read frame type");
-                     continue;
-                 }
-                 
-                 size_t bytes_read = read_array(length_bytes, 2);
-                 if (bytes_read < 2) {
-                     ESP_LOGW(TAG, "Failed to read data length");
-                     continue;
-                 }
-                 
-                 uint16_t data_length = (length_bytes[0] << 8) | length_bytes[1];
-                 ESP_LOGD(TAG, "Frame type: 0x%02X, length: %u", frame_type, data_length);
-                 
-                 // Sanity check the data length
-                 if (data_length > RX_BUFFER_SIZE) {
-                     ESP_LOGW(TAG, "Invalid data length: %u", data_length);
-                     continue;
-                 }
-                 
-                 // Wait until we have all the data
-                 if (available() < data_length + 4) {  // data + end frame
-                     ESP_LOGV(TAG, "Waiting for more data (available: %d, needed: %d)", 
-                             available(), data_length + 4);
-                     return;  // Come back when we have more data
+                 if (buffer.size() < 74) {  // Full standard packet size
+                     return;  // Wait for more data
                  }
  
-                 // Read frame data
-                 std::vector<uint8_t> data(data_length);
-                 size_t data_read = read_array(data.data(), data_length);
-                 if (data_read < data_length) {
-                     ESP_LOGW(TAG, "Short read on frame data: expected %u, got %u", data_length, data_read);
-                     continue;
+                 // Parse standard format
+                 uint16_t length = buffer[5] << 8 | buffer[4];
+                 uint8_t type = buffer[6];
+                 uint8_t state = buffer[7];
+                 uint16_t distance = buffer[9] << 8 | buffer[8];  // cm
+ 
+                 ESP_LOGD(TAG, "Standard packet - Length: %u, Type: 0x%02X, State: %u, Distance: %u cm",
+                          length, type, state, distance);
+ 
+                 if (this->distance_sensor_ != nullptr) {
+                     this->distance_sensor_->publish_state(distance / 100.0f);  // Convert to meters
                  }
  
-                 // Read and verify frame end
-                 uint8_t end[4];
-                 size_t end_size = read_array(end, sizeof(end));
-                 if (end_size < sizeof(end) || !verify_frame_end_(end, sizeof(end))) {
-                     ESP_LOGW(TAG, "Invalid frame end");
-                     dump_data_("Invalid end frame", end, end_size);
-                     continue;
+                 bool presence = (state >= 2);  // 0/1 = no one, 2/3 = someone
+                 if (this->presence_sensor_ != nullptr) {
+                     this->presence_sensor_->publish_state(presence);
                  }
  
-                 // We have a complete valid frame, process it
-                 ESP_LOGD(TAG, "Processing frame type 0x%02X with length %u", frame_type, data_length);
-                 dump_data_("Frame data", data.data(), data_length);
-                 
-                 if (this->output_mode_standard_) {
-                     process_standard_frame_(frame_type, data_length, data.data());
-                 } else {
-                     process_simple_frame_(frame_type, data_length, data.data());
+                 // Process energy values for each gate
+                 for (size_t i = 0; i < 16; i++) {
+                     uint8_t energy = buffer[12 + i];  // Energy values start after reserved bytes
+                     auto it = this->gate_energy_sensors_.find(i);
+                     if (it != this->gate_energy_sensors_.end() && it->second != nullptr) {
+                         it->second->publish_state(energy);
+                     }
                  }
-                 
-                 return;  // Successfully processed a frame
+ 
+                 buffer.erase(buffer.begin(), buffer.begin() + 74);
              } else {
-                 // Invalid header, skip one byte and continue looking
-                 read();  // Remove the byte we peeked at
-                 ESP_LOGV(TAG, "Skipping invalid header byte: 0x%02X", peek_byte);
+                 buffer.erase(buffer.begin());
              }
          } else {
-             // Not a header byte, skip it
-             read();  // Remove the byte we peeked at
-             ESP_LOGV(TAG, "Skipping non-header byte: 0x%02X", peek_byte);
-         }
-     }
- }
+             // Minimal data format: 6E | state(1) | distance(2) | 62
+             if (buffer[4] == 0x02 && buffer[3] == 0x6E && buffer[2] == 0x62) {
+                 uint8_t target_state = buffer[0];
+                 uint16_t distance = buffer[1];  // Distance in cm
  
- void HLKLD2410SComponent::process_simple_frame_(uint8_t frame_type, uint16_t data_length, const uint8_t *data) {
-     if (data_length < 2) {
-         ESP_LOGW(TAG, "Simple frame data too short");
-         return;
-     }
+                 ESP_LOGD(TAG, "Minimal packet - State: 0x%02X, Distance: %u cm", 
+                          target_state, distance);
  
-     uint16_t distance = (data[0] << 8) | data[1];
-     ESP_LOGD(TAG, "Simple frame - distance: %u cm", distance);
-     
-     if (this->distance_sensor_ != nullptr) {
-         this->distance_sensor_->publish_state(distance / 100.0f);  // Convert to meters
-     }
+                 if (this->distance_sensor_ != nullptr) {
+                     this->distance_sensor_->publish_state(distance / 100.0f);  // Convert to meters
+                 }
  
-     bool presence = (distance > 0);
-     if (this->presence_sensor_ != nullptr) {
-         this->presence_sensor_->publish_state(presence);
-     }
+                 bool presence = (target_state >= 2);
+                 if (this->presence_sensor_ != nullptr) {
+                     this->presence_sensor_->publish_state(presence);
+                 }
  
-     if (presence) {
-         this->last_presence_detected_ = millis();
-         ESP_LOGI(TAG, "Presence detected at distance: %u cm", distance);
-     }
- }
- 
- void HLKLD2410SComponent::process_standard_frame_(uint8_t frame_type, uint16_t data_length, const uint8_t *data) {
-     if (data_length < 4) {
-         ESP_LOGW(TAG, "Standard frame data too short");
-         return;
-     }
- 
-     uint16_t distance = (data[0] << 8) | data[1];
-     ESP_LOGD(TAG, "Standard frame - distance: %u cm", distance);
-     
-     // Process energy values for each gate if available
-     if (data_length >= 4 + MAX_GATES) {
-         for (size_t i = 0; i < MAX_GATES; i++) {
-             uint8_t energy = data[4 + i];
-             auto it = this->gate_energy_sensors_.find(i);
-             if (it != this->gate_energy_sensors_.end() && it->second != nullptr) {
-                 it->second->publish_state(energy);
+                 buffer.erase(buffer.begin(), buffer.begin() + 5);
+             } else {
+                 buffer.erase(buffer.begin());
              }
          }
      }
  
-     if (this->distance_sensor_ != nullptr) {
-         this->distance_sensor_->publish_state(distance / 100.0f);  // Convert to meters
+     if (buffer.size() > 256) {
+         buffer.clear();
+     }
+ }
+ 
+ bool HLKLD2410SComponent::switch_output_mode_(bool standard_mode) {
+     ESP_LOGI(TAG, "Switching to %s mode", standard_mode ? "standard" : "minimal");
+     
+     if (!enable_configuration()) {
+         ESP_LOGE(TAG, "Failed to enable configuration mode");
+         return false;
      }
  
-     bool presence = (distance > 0);
-     if (this->presence_sensor_ != nullptr) {
-         this->presence_sensor_->publish_state(presence);
+     std::vector<uint8_t> data = {
+         0x00, 0x00, 0x00,  // First three bytes are always 0
+         static_cast<uint8_t>(standard_mode ? 0x01 : 0x00),  // Mode selection
+         0x00, 0x00  // Last two bytes are always 0
+     };
+ 
+     bool success = write_command_(CommandWord::SWITCH_OUTPUT_MODE, data);
+     
+     if (!disable_configuration()) {
+         ESP_LOGE(TAG, "Failed to disable configuration mode");
+         return false;
      }
  
-     if (presence) {
-         this->last_presence_detected_ = millis();
-         ESP_LOGI(TAG, "Presence detected at distance: %u cm with motion energy: %u", 
-                  distance, data[2]);
-     }
+     return success;
  }
  
  bool HLKLD2410SComponent::enable_configuration() {
      ESP_LOGI(TAG, "Enabling configuration mode");
-     if (write_command_(CommandWord::ENABLE_CONFIGURATION)) {
+     if (write_command_(CommandWord::ENABLE_CONFIGURATION, {0x01, 0x00})) {
          this->config_mode_ = true;
          if (this->config_mode_sensor_ != nullptr) {
              this->config_mode_sensor_->publish_state(true);
@@ -240,101 +201,3 @@
      }
      return false;
  }
- 
- bool HLKLD2410SComponent::write_command_(CommandWord command, const std::vector<uint8_t> &data) {
-     ESP_LOGD(TAG, "Writing command 0x%04X", static_cast<uint16_t>(command));
-     
-     // Write frame header
-     write_array(CONFIG_FRAME_HEADER, sizeof(CONFIG_FRAME_HEADER));
-     
-     // Write command word (2 bytes, big endian)
-     uint16_t cmd = static_cast<uint16_t>(command);
-     write_byte(cmd >> 8);
-     write_byte(cmd & 0xFF);
-     
-     // Write data length (2 bytes, big endian)
-     uint16_t length = data.size();
-     write_byte(length >> 8);
-     write_byte(length & 0xFF);
-     
-     // Write data if any
-     if (length > 0) {
-         write_array(data.data(), length);
-     }
-     
-     // Write frame end
-     write_array(CONFIG_FRAME_END, sizeof(CONFIG_FRAME_END));
-     
-     // Wait for ACK
-     return read_ack_(command);
- }
- 
- bool HLKLD2410SComponent::read_ack_(CommandWord expected_cmd) {
-     uint32_t start = millis();
-     std::vector<uint8_t> buffer;
-     buffer.reserve(32);  // Reserve space for the ACK frame
-     
-     ESP_LOGD(TAG, "Waiting for ACK for command 0x%04X", static_cast<uint16_t>(expected_cmd));
-     
-     while (millis() - start < ACK_TIMEOUT_MS) {
-         if (available()) {
-             uint8_t byte;
-             read_byte(&byte);
-             buffer.push_back(byte);
-             dump_data_("ACK buffer", buffer.data(), buffer.size());
-             
-             // Look for frame header in the buffer
-             if (buffer.size() >= 4) {
-                 for (size_t i = 0; i <= buffer.size() - 4; i++) {
-                     if (buffer[i] == 0xFD && 
-                         buffer[i+1] == 0xFC && 
-                         buffer[i+2] == 0xFB && 
-                         buffer[i+3] == 0xFA) {
-                         
-                         // Found header, ensure we have enough data for a complete ACK frame
-                         if (buffer.size() >= i + 8) {  // Header(4) + Command(2) + Status(2)
-                             uint16_t received_cmd = (buffer[i+4] << 8) | buffer[i+5];
-                             uint16_t status = (buffer[i+6] << 8) | buffer[i+7];
-                             
-                             ESP_LOGD(TAG, "Received ACK - CMD: 0x%04X, Status: 0x%04X", 
-                                      received_cmd, status);
-                             
-                             if (received_cmd == static_cast<uint16_t>(expected_cmd)) {
-                                 ESP_LOGI(TAG, "Command 0x%04X acknowledged with status 0x%04X", 
-                                         static_cast<uint16_t>(expected_cmd), status);
-                                 return (status == 0x0000);
-                             }
-                         }
-                     }
-                 }
-             }
-             
-             // Prevent buffer from growing too large
-             if (buffer.size() > 64) {
-                 buffer.erase(buffer.begin(), buffer.begin() + 32);
-             }
-         }
-         delay(1);
-     }
-     
-     ESP_LOGW(TAG, "Command 0x%04X not acknowledged within timeout", 
-              static_cast<uint16_t>(expected_cmd));
-     return false;
- }
- 
- bool HLKLD2410SComponent::verify_frame_header_(const uint8_t *buf, size_t len) {
-     if (len < sizeof(CONFIG_FRAME_HEADER)) {
-         return false;
-     }
-     return memcmp(buf, CONFIG_FRAME_HEADER, sizeof(CONFIG_FRAME_HEADER)) == 0;
- }
- 
- bool HLKLD2410SComponent::verify_frame_end_(const uint8_t *buf, size_t len) {
-     if (len < sizeof(CONFIG_FRAME_END)) {
-         return false;
-     }
-     return memcmp(buf, CONFIG_FRAME_END, sizeof(CONFIG_FRAME_END)) == 0;
- }
- 
- }  // namespace hlk_ld2410s
- }  // namespace esphome

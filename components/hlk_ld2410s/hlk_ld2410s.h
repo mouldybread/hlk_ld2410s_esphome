@@ -2,7 +2,7 @@
  * HLK-LD2410S mmWave Radar Sensor Component for ESPHome.
  * 
  * Created by github.com/mouldybread
- * Creation Date/Time: 2025-03-27 14:09:51 UTC
+ * Creation Date/Time: 2025-03-27 14:29:01 UTC
  */
 
  #pragma once
@@ -29,9 +29,19 @@
  
  // Command words for configuration
  enum class CommandWord : uint16_t {
-     ENABLE_CONFIGURATION = 0xFF01,
-     DISABLE_CONFIGURATION = 0xFE01,
-     // Add other command words as needed
+     ENABLE_CONFIGURATION = 0xFF00,
+     DISABLE_CONFIGURATION = 0xFE00,
+     SWITCH_OUTPUT_MODE = 0x7A00,
+     READ_FIRMWARE_VERSION = 0x0000,
+     WRITE_SERIAL_NUMBER = 0x1000,
+     READ_SERIAL_NUMBER = 0x1100,
+     WRITE_PARAMETERS = 0x7000,
+     READ_PARAMETERS = 0x7100,
+     AUTO_THRESHOLD = 0x0900,
+     WRITE_TRIGGER_THRESHOLD = 0x7200,
+     READ_TRIGGER_THRESHOLD = 0x7300,
+     WRITE_HOLD_THRESHOLD = 0x7600,
+     READ_HOLD_THRESHOLD = 0x7700
  };
  
  class HLKLD2410SComponent;  // Forward declaration
@@ -65,6 +75,7 @@
      void dump_config() override {
          ESP_LOGCONFIG(TAG, "HLK-LD2410S:");
          ESP_LOGCONFIG(TAG, "  Configuration Mode: %s", this->config_mode_ ? "ON" : "OFF");
+         ESP_LOGCONFIG(TAG, "  Output Mode: %s", this->output_mode_standard_ ? "Standard" : "Minimal");
      }
      float get_setup_priority() const override { return setup_priority::DATA; }
  
@@ -106,7 +117,8 @@
      bool verify_frame_header_(const uint8_t *buf, size_t len);
      bool verify_frame_end_(const uint8_t *buf, size_t len);
      void dump_data_(const char* prefix, const uint8_t* data, size_t len);
-     void check_uart_settings_();  // Added this line
+     void check_uart_settings_();
+     bool switch_output_mode_(bool standard_mode);
  
      // Sensors
      binary_sensor::BinarySensor *presence_sensor_{nullptr};
