@@ -12,7 +12,20 @@ namespace esphome {
 namespace hlk_ld2410s {
 
 static const char *const TAG = "hlk_ld2410s";
-static const uint8_t MAX_GATES = 16;  // Changed to match __init__.py
+static const uint8_t MAX_GATES = 16;
+
+// Configuration frame constants
+static const uint8_t CONFIG_FRAME_HEADER[] = {0xFD, 0xFC, 0xFB, 0xFA};
+static const uint8_t CONFIG_FRAME_END[] = {0x04, 0x03, 0x02, 0x01};
+static const uint16_t CONFIG_FRAME_MIN_LENGTH = 8;
+static const uint32_t ACK_TIMEOUT_MS = 1000;
+
+// Command words for configuration
+enum class CommandWord : uint16_t {
+    ENABLE_CONFIGURATION = 0xFF01,
+    DISABLE_CONFIGURATION = 0xFE01,
+    // Add other command words as needed
+};
 
 class HLKLD2410SComponent;  // Forward declaration
 
@@ -54,8 +67,8 @@ class HLKLD2410SComponent : public Component, public uart::UARTDevice {
     void set_distance_report_frequency(float freq) { distance_report_freq_ = freq; }
     void set_farthest_gate(uint8_t gate) { farthest_gate_ = gate; }
     void set_nearest_gate(uint8_t gate) { nearest_gate_ = gate; }
-    void set_trigger_thresholds(std::vector<uint8_t> thresholds) { trigger_thresholds_ = thresholds; }
-    void set_hold_thresholds(std::vector<uint8_t> thresholds) { hold_thresholds_ = thresholds; }
+    void set_trigger_thresholds(const std::vector<uint8_t> &thresholds) { trigger_thresholds_ = thresholds; }
+    void set_hold_thresholds(const std::vector<uint8_t> &thresholds) { hold_thresholds_ = thresholds; }
     void set_auto_threshold(uint8_t trigger_factor, uint8_t hold_factor, uint8_t scan_time) {
         auto_threshold_trigger_ = trigger_factor;
         auto_threshold_hold_ = hold_factor;
