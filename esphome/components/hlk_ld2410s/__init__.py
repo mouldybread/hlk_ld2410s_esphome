@@ -9,6 +9,6 @@ CONFIG_SCHEMA = cv.Schema({
 }).extend(cv.COMPONENT_SCHEMA)
 
 def to_code(config):
-    var = core.Component.new(config[CONF_ID])
+    var = core.Pvariable(config[CONF_ID], HLK_LD2410S())
+    core.add(var)
     core.add(var.set_parent_id(config[CONF_ID]))
-    core.add_component(var, config)
